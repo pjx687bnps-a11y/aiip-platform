@@ -37,7 +37,38 @@
 <textarea id="output"></textarea>
 
 <script>
-function analyze() {
+async function analyze() {
+  const output = document.getElementById("output");
+
+  output.value = "⏳ Анализира се...";
+
+  const apiKey = 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
+
+  const response = await fetch("https://api.openai.com/v1/chat/completions", {
+    method: "POST",
+    headers: {
+      "Content-Type": "application/json",
+      "Authorization": "Bearer " + apiKey
+    },
+    body: JSON.stringify({
+      model: "gpt-4o-mini",
+      messages: [
+        {
+          role: "system",
+          content: "You are a senior legal expert. Analyze the document and provide facts, legal errors, risk score and recommendations."
+        },
+        {
+          role: "user",
+          content: "Analyze this legal document."
+        }
+      ]
+    })
+  });
+
+  const data = await response.json();
+
+  output.value = data.choices[0].message.content;
+}
   document.getElementById("output").value =
 `📌 ФАКТИ:
 - Орган: Прокуратура
