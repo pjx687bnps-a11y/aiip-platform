@@ -1,10 +1,77 @@
 <!DOCTYPE html>
 <html>
 <head>
-  <title>AIIP</title>
+  <title>AIIP Legal Assistant</title>
+  <style>
+    body {
+      font-family: Arial;
+      max-width: 700px;
+      margin: auto;
+      padding: 20px;
+    }
+    button {
+      margin-top: 10px;
+      padding: 10px;
+      cursor: pointer;
+    }
+    textarea {
+      width: 100%;
+      height: 150px;
+      margin-top: 10px;
+    }
+  </style>
 </head>
 <body>
-  <h1>AIIP Legal Assistant 🚀</h1>
-  <p>Системата вече работи.</p>
+
+<h1>⚖️ AIIP Legal Assistant</h1>
+
+<h3>📄 Качи документ</h3>
+<input type="file" id="fileInput">
+
+<br>
+
+<button onclick="analyze()">Анализирай</button>
+<button onclick="generateAppeal()">Генерирай жалба</button>
+
+<h3>📊 Резултат:</h3>
+<textarea id="output"></textarea>
+
+<script>
+function analyze() {
+  document.getElementById("output").value =
+`📌 ФАКТИ:
+- Орган: Прокуратура
+- Тип: Постановление
+
+⚠️ ПРАВНИ ГРЕШКИ:
+- Непълно изследване на фактите
+- Възможна неправилна квалификация
+
+📊 RISK SCORE: 7/10
+
+👉 Препоръка:
+Подаване на жалба`;
+}
+
+function generateAppeal() {
+  document.getElementById("output").value =
+`ЖАЛБА
+
+До компетентната прокуратура
+
+Уважаеми господа,
+
+Обжалвам постановлението поради:
+
+1. Непълно изясняване на фактите
+2. Неправилна правна квалификация
+
+Моля за преразглеждане.
+
+Дата:
+Подпис:`;
+}
+</script>
+
 </body>
 </html>
