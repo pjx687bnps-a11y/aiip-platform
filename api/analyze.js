@@ -81,6 +81,21 @@ ${text}
     }
 
     let extracted;
+
+try {
+  const raw = extractionData.choices[0].message.content;
+
+  // 🧠 чистим markdown ако има
+  const cleaned = raw.replace(/```json|```/g, "").trim();
+
+  extracted = JSON.parse(cleaned);
+
+} catch (err) {
+  extracted = {
+    error: "Extraction failed",
+    raw: extractionData.choices[0].message.content
+  };
+}
     try {
       extracted = JSON.parse(extractionData.choices[0].message.content);
     } catch {
