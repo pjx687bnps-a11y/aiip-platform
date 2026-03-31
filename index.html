@@ -47,7 +47,14 @@ async function analyze() {
       })
     });
 
-    const data = await res.json();
+    const text = await res.text();
+
+try {
+  const data = JSON.parse(text);
+  output.value = data.result || "❌ " + data.error;
+} catch {
+  output.value = "❌ Server error:\n" + text;
+}
 
     output.value = data.result || JSON.stringify(data);
   } catch (err) {
