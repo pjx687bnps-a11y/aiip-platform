@@ -12,8 +12,38 @@ export default async function handler(req, res) {
     }
 
     // 🔥 STEP 1: EXTRACTION (структуриране)
-    const extractionPrompt = `
-Извлечи структурирана информация от текста.
+const extractionPrompt = `
+Ти си система за извличане на юридически данни.
+
+Извлечи МАКСИМАЛНО точно:
+
+Върни САМО JSON:
+
+{
+  "persons": [
+    {
+      "name": "",
+      "egn": "",
+      "role": ""
+    }
+  ],
+  "institutions": [],
+  "case_numbers": [],
+  "dates": [],
+  "legal_references": [],
+  "summary": ""
+}
+
+ПРАВИЛА:
+- ако няма ЕГН → ""
+- ако има ЕГН → извлечи точно
+- разпознай роли: прокурор, жалбоподател, обвиняем
+- не измисляй данни
+- извличай само от текста
+
+Текст:
+${text}
+`;
 
 Върни JSON:
 
