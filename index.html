@@ -27,6 +27,30 @@
       "https://cdnjs.cloudflare.com/ajax/libs/pdf.js/3.11.174/pdf.worker.min.js";
   }
 
+  const output = document.getElementById("output");
+
+  function show(msg) {
+    output.value = msg;
+  }
+
+  // блокира стария /api/analyze ако някъде още се вика
+  const originalFetch = window.fetch ? window.fetch.bind(window) : null;
+  window.fetch = async function (url, options) {
+    try {
+      if (typeof url === "string" && url.includes("/api/analyze")) {
+        return new Response(
+          JSON.stringify({ result: "⚠️ Старият /api/analyze беше блокиран от новия код." }),
+          {
+            status: 200,
+            headers: { "Content-Type": "application/json" }
+          }
+        );
+      }
+    } catch (e) {}
+    if (originalFetch) return originalFetch(url, options);
+    throw new Error("fetch is not available");
+  };
+
   async function extractTextFromPDF(file) {
     const buffer = await file.arrayBuffer();
     const pdf = await pdfjsLib.getDocument({ data: buffer }).promise;
@@ -60,7 +84,7 @@
           }).promise;
 
           const result = await worker.recognize(canvas);
-          ocrText += (result && result.data && result.data.text ? result.data.text : "") + "\n";
+          ocrText += ((result && result.data && result.data.text) ? result.data.text : "") + "\n";
         }
 
         await worker.terminate();
@@ -86,23 +110,19 @@
     return (await file.text()).trim();
   }
 
-  async function runAnalyze(event) {
-    if (event) {
-      event.preventDefault();
-      event.stopPropagation();
-      if (event.stopImmediatePropagation) {
-        event.stopImmediatePropagation();
-      }
+  async function runNewAnalyze(e) {
+    if (e) {
+      e.preventDefault();
+      e.stopPropagation();
+      if (e.stopImmediatePropagation) e.stopImmediatePropagation();
     }
 
-    const output = document.getElementById("output");
     const fileInput = document.getElementById("file");
-
-    output.value = "⏳ Анализира се...";
+    show("🟢 НОВИЯТ КОД СЕ ИЗПЪЛНЯВА...");
 
     try {
       if (!fileInput || !fileInput.files || fileInput.files.length === 0) {
-        output.value = "❌ Моля качете файл.";
+        show("❌ Моля качете файл.");
         return false;
       }
 
@@ -117,42 +137,60 @@
       } else if (name.endsWith(".txt")) {
         text = await extractTextFromTxt(file);
       } else {
-        output.value = "❌ Поддържат се само PDF, DOCX и TXT.";
+        show("❌ Поддържат се само PDF, DOCX и TXT.");
         return false;
       }
 
       if (!text || !text.trim()) {
-        output.value = "❌ Няма текст в документа.";
+        show("❌ Няма текст в документа.");
         return false;
       }
 
-      output.value = text;
+      show(text);
       return false;
     } catch (err) {
       console.error(err);
-      output.value = "❌ Грешка: " + err.message;
+      show("❌ Грешка: " + err.message);
       return false;
     }
   }
 
-  function hardReplaceButton() {
+  // глобално override на analyze
+  window.analyze = runNewAnalyze;
+
+  // прехващане на click още на document ниво
+  document.addEventListener("click", function (e) {
+    const btn = e.target && e.target.closest ? e.target.closest("#analyzeBtn") : null;
+    if (!btn) return;
+    runNewAnalyze(e);
+  }, true);
+
+  // подменя бутона, за да махне старите listeners
+  function replaceButton() {
     const oldBtn = document.getElementById("analyzeBtn");
-    if (!oldBtn) return;
+    if (!oldBtn || !oldBtn.parentNode) return;
 
     const newBtn = oldBtn.cloneNode(true);
+    newBtn.type = "button";
     oldBtn.parentNode.replaceChild(newBtn, oldBtn);
 
-    newBtn.addEventListener("click", runAnalyze, true);
-    newBtn.onclick = runAnalyze;
+    newBtn.onclick = runNewAnalyze;
+    newBtn.addEventListener("click", runNewAnalyze, true);
   }
 
-  if (document.readyState === "loading") {
-    document.addEventListener("DOMContentLoaded", hardReplaceButton);
-  } else {
-    hardReplaceButton();
+  // периодично презаписва бутона, ако платформата инжектира стар код пак
+  function keepOverrideAlive() {
+    replaceButton();
+    const btn = document.getElementById("analyzeBtn");
+    if (btn) {
+      btn.onclick = runNewAnalyze;
+    }
   }
 
-  window.analyze = runAnalyze;
+  keepOverrideAlive();
+  setInterval(keepOverrideAlive, 1000);
+
+  show("✅ Кодът е зареден. Качи файл и натисни „Анализирай“.");
 })();
 </script>
 
