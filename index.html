@@ -2,126 +2,42 @@
 <html lang="bg">
 <head>
   <meta charset="UTF-8">
-  <title>⚖️ AIIP Legal Assistant</title>
+  <title>AIIP</title>
 </head>
 <body>
 
-<h1>⚖️ AIIP Legal Assistant</h1>
+<h2>Качи файл</h2>
 
-<input type="file" id="file" accept=".pdf,.docx,.txt" />
+<input type="file" id="file">
+<button onclick="analyze()">Анализирай</button>
+
 <br><br>
 
-<button id="analyzeBtn">Анализирай</button>
-
-<h3>📊 Резултат:</h3>
 <textarea id="output" style="width:100%; height:400px;"></textarea>
 
-<script src="https://cdnjs.cloudflare.com/ajax/libs/pdf.js/3.11.174/pdf.min.js"></script>
-<script src="https://unpkg.com/tesseract.js@5/dist/tesseract.min.js"></script>
-<script src="https://unpkg.com/mammoth/mammoth.browser.min.js"></script>
-
 <script>
-pdfjsLib.GlobalWorkerOptions.workerSrc =
-  "https://cdnjs.cloudflare.com/ajax/libs/pdf.js/3.11.174/pdf.worker.min.js";
-
-document.getElementById("analyzeBtn").addEventListener("click", analyze);
-
-// PDF
-async function extractTextFromPDF(file) {
-  const buffer = await file.arrayBuffer();
-  const pdf = await pdfjsLib.getDocument({ data: buffer }).promise;
-
-  let text = "";
-
-  for (let i = 1; i <= pdf.numPages; i++) {
-    const page = await pdf.getPage(i);
-    const content = await page.getTextContent();
-
-    text += content.items.map(i => i.str).join(" ") + "\n";
-  }
-
-  // ако няма текст → OCR
-  if (text.trim().length < 20) {
-    const worker = await Tesseract.createWorker("bul+eng");
-
-    for (let i = 1; i <= pdf.numPages; i++) {
-      const page = await pdf.getPage(i);
-      const viewport = page.getViewport({ scale: 2 });
-
-      const canvas = document.createElement("canvas");
-      const ctx = canvas.getContext("2d");
-
-      canvas.width = viewport.width;
-      canvas.height = viewport.height;
-
-      await page.render({ canvasContext: ctx, viewport }).promise;
-
-      const result = await worker.recognize(canvas);
-      text += result.data.text + "\n";
-    }
-
-    await worker.terminate();
-  }
-
-  return text.trim();
-}
-
-// DOCX
-async function extractTextFromWord(file) {
-  const buffer = await file.arrayBuffer();
-  const result = await mammoth.extractRawText({ arrayBuffer: buffer });
-  return result.value.trim();
-}
-
-// TXT
-async function extractTextFromTxt(file) {
-  return (await file.text()).trim();
-}
-
-// MAIN
 async function analyze() {
+  const file = document.getElementById("file").files[0];
   const output = document.getElementById("output");
-  const fileInput = document.getElementById("file");
 
-  output.value = "⏳ Анализира се...";
-
-  if (!fileInput.files.length) {
+  if (!file) {
     output.value = "❌ Качи файл";
     return;
   }
 
-  const file = fileInput.files[0];
-  const name = file.name.toLowerCase();
-
-  let text = "";
-
   try {
-    if (name.endsWith(".pdf")) {
-      text = await extractTextFromPDF(file);
-    } 
-    else if (name.endsWith(".docx")) {
-      text = await extractTextFromWord(file);
-    } 
-    else if (name.endsWith(".txt")) {
-      text = await extractTextFromTxt(file);
-    } 
-    else {
-      output.value = "❌ Само PDF, DOCX, TXT";
-      return;
-    }
+    // ЧЕТЕ ВСЯКАКЪВ ФАЙЛ КАТО ТЕКСТ (най-просто)
+    const text = await file.text();
 
     if (!text) {
-      output.value = "❌ Няма текст в документа";
+      output.value = "❌ Няма текст в файла";
       return;
     }
 
-    // показва текста (първо това да работи!)
     output.value = text;
 
-    // после можеш да махнеш горния ред и да ползваш backend
-
-  } catch (err) {
-    output.value = "❌ " + err.message;
+  } catch (e) {
+    output.value = "❌ Грешка: " + e.message;
   }
 }
 </script>
