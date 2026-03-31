@@ -1,6 +1,9 @@
 export default async function handler(req, res) {
   try {
-    const { text } = req.body;
+    const body =
+      typeof req.body === "string" ? JSON.parse(req.body) : req.body;
+
+    const { text } = body;
 
     if (!text) {
       return res.status(400).json({ error: "No text provided" });
@@ -36,11 +39,17 @@ ${text}
 
     const data = await ai.json();
 
-    res.status(200).json({
+    if (!ai.ok) {
+      return res.status(500).json({
+        error: data.error?.message || "OpenAI error"
+      });
+    }
+
+    return res.status(200).json({
       result: data.choices[0].message.content
     });
 
   } catch (err) {
-    res.status(500).json({ error: err.message });
+    return res.status(500).json({ error: err.message });
   }
 }
