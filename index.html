@@ -38,6 +38,32 @@
 
 <script>
 async function analyze() {
+  const fileInput = document.getElementById("fileInput");
+  const output = document.getElementById("output");
+
+  if (!fileInput.files.length) {
+    output.value = "Моля качи файл.";
+    return;
+  }
+
+  const file = fileInput.files[0];
+
+  const text = await file.text();
+
+  output.value = "⏳ Анализира се...";
+
+  const res = await fetch("/api/analyze", {
+    method: "POST",
+    headers: {
+      "Content-Type": "application/json"
+    },
+    body: JSON.stringify({ text })
+  });
+
+  const data = await res.json();
+
+  output.value = data.result;
+} {
   const output = document.getElementById("output");
 
   output.value = "⏳ Анализира се...";
