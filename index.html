@@ -90,7 +90,14 @@ async function analyze() {
       body: JSON.stringify({ text })
     });
 
-    const data = await res.json();
+    const textResponse = await res.text();
+
+try {
+  const data = JSON.parse(textResponse);
+  output.value = data.result || "❌ " + data.error;
+} catch {
+  output.value = "❌ Server error:\n" + textResponse;
+}
 
     output.value = data.result || "❌ " + data.error;
 
