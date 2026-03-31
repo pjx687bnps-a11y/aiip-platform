@@ -1,43 +1,31 @@
 export default async function handler(req, res) {
   try {
-    let text = "";
+    const body =
+      typeof req.body === "string" ? JSON.parse(req.body) : req.body;
 
-    // 🧠 ВАЖНО: Vercel НЕ поддържа директно multipart parsing така
-    // затова засега работим само с text
-
-    if (req.body) {
-      const body =
-        typeof req.body === "string" ? JSON.parse(req.body) : req.body;
-
-      text = body?.text || "";
-    }
+    const text = body?.text;
 
     if (!text) {
       return res.status(400).json({
-        error: "⚠️ Качването на файлове още не е активирано. Постави текст за тест."
+        error: "No text provided"
       });
     }
 
     const prompt = `
-Ти си професионален юридически анализатор.
+Ти си старши адвокат и правен анализатор.
 
-1. Извлечи:
-- Имена
-- ЕГН
-- Дати
-- Номер на дело
+Направи ДЪЛБОК юридически анализ:
 
-2. Анализ:
-- Факти
-- Проблеми
-- Противоречия
-- Грешки
-
-3. Оценка:
-- Законосъобразност (1–10)
-- Успех (%)
-
-4. Генерирай жалба
+1. ФАКТИ
+2. ПРАВНА КВАЛИФИКАЦИЯ (НК, НПК)
+3. АНАЛИЗ НА ПРОКУРОРСКИЯ АКТ
+4. ДОКАЗАТЕЛСТВА (липси, грешки)
+5. ЛОГИЧЕСКИ ГРЕШКИ
+6. ЕС ПРАВО (ЕКПЧ)
+7. ЗАКОНОСЪОБРАЗНОСТ (1–10)
+8. УСПЕХ (%)
+9. СТРАТЕГИЯ
+10. ПРОФЕСИОНАЛНА ЖАЛБА
 
 Текст:
 ${text}
@@ -59,7 +47,7 @@ ${text}
 
     if (!ai.ok) {
       return res.status(500).json({
-        error: data.error?.message || "OpenAI API error"
+        error: data.error?.message
       });
     }
 
