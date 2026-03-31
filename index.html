@@ -9,6 +9,119 @@ pdfjsLib.GlobalWorkerOptions.workerSrc =
 document.getElementById("analyzeBtn").addEventListener("click", analyze);
 
 async function extractTextFromPDF(file) {
+  const buffer = await file.arrayBuffer();
+  const pdf = await pdfjsLib.getDocument({ data: buffer }).promise;
+
+  let text = "";
+
+  for (let i = 1; i <= pdf.numPages; i++) {
+    const page = await pdf.getPage(i);
+    const content = await page.getTextContent();
+    text += content.items.map(i => i.str).join(" ") + "\n";
+  }
+
+  if (text.trim().length < 20) {
+    const worker = await Tesseract.createWorker("bul+eng");
+
+    for (let i = 1; i <= pdf.numPages; i++) {
+      const page = await pdf.getPage(i);
+      const viewport = page.getViewport({ scale: 2 });
+
+      const canvas = document.createElement("canvas");
+      const ctx = canvas.getContext("2d");
+
+      canvas.width = viewport.width;
+      canvas.height = viewport.height;
+
+      await page.render({ canvasContext: ctx, viewport }).promise;
+
+      const result = await worker.recognize(canvas);
+      text += result.data.text + "\n";
+    }
+
+    await worker.terminate();
+  }
+
+  return text.trim();
+}
+
+async function extractTextFromWord(file) {
+  const buffer = await file.arrayBuffer();
+  const result = await mammoth.extractRawText({ arrayBuffer: buffer });
+  return result.value.trim();
+}
+
+async function extractTextFromTxt(file) {
+  return (await file.text()).trim();
+}
+
+async function analyze() {
+  const output = document.getElementById("output");
+  const fileInput = document.getElementById("file");
+
+  output.value = "⏳ Анализира се...";
+
+  if (!fileInput.files.length) {
+    output.value = "❌ Качи файл";
+    return;
+  }
+
+  const file = fileInput.files[0];
+  const name = file.name.toLowerCase();
+
+  let text = "";
+
+  try {
+    if (name.endsWith(".pdf")) {
+      text = await extractTextFromPDF(file);
+    } else if (name.endsWith(".docx")) {
+      text = await extractTextFromWord(file);
+    } else if (name.endsWith(".txt")) {
+      text = await extractTextFromTxt(file);
+    } else {
+      output.value = "❌ Само PDF, DOCX, TXT";
+      return;
+    }
+
+    if (!text) {
+      output.value = "❌ Няма текст в документа";
+      return;
+    }
+
+    // ТЕСТ: показва текста (ако искаш анализ, махни return)
+    output.value = text;
+    return;
+
+    const res = await fetch("/api/analyze", {
+      method: "POST",
+      headers: {
+        "Content-Type": "application/json"
+      },
+      body: JSON.stringify({ text })
+    });
+
+    const raw = await res.text();
+
+    try {
+      const data = JSON.parse(raw);
+      output.value = data.result || "❌ Няма резултат";
+    } catch {
+      output.value = raw;
+    }
+
+  } catch (err) {
+    output.value = "❌ " + err.message;
+  }
+}
+</script>
+
+<script>
+pdfjsLib.GlobalWorkerOptions.workerSrc =
+  "https://cdnjs.cloudflare.com/ajax/libs/pdf.js/3.11.174/pdf.worker.min.js";
+
+document.getElementById("analyzeBtn").addEventListener("click", analyze);
+
+async function extractTextFromPDF(file) {
   let text = "";
 
   try {
