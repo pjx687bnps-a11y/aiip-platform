@@ -30,7 +30,7 @@ Be structured and precise.`,
           },
           {
             role: "user",
-            content: "Analyze the uploaded legal document.",
+            content: content: req.body.text,
           },
         ],
       }),
