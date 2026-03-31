@@ -4,7 +4,31 @@ export default async function handler(req, res) {
     const body =
       typeof req.body === "string" ? JSON.parse(req.body) : req.body;
 
-    const { text } = body || {};
+let text = "";
+
+// 📄 ако идва файл
+if (req.headers["content-type"]?.includes("multipart/form-data")) {
+  const chunks = [];
+
+  for await (const chunk of req) {
+    chunks.push(chunk);
+  }
+
+  const buffer = Buffer.concat(chunks);
+  text = buffer.toString();
+}
+
+// 🧠 ако идва текст (стария вариант)
+else {
+  const body =
+    typeof req.body === "string" ? JSON.parse(req.body) : req.body;
+
+  text = body?.text || "";
+}
+
+if (!text) {
+  return res.status(400).json({ error: "No input provided" });
+}
 
     if (!text) {
       return res.status(400).json({ error: "No text provided" });
