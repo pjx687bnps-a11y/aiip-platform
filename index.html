@@ -1,134 +1,159 @@
 <!DOCTYPE html>
-<html>
+<html lang="bg">
 <head>
+  <meta charset="UTF-8">
   <title>⚖️ AIIP Legal Assistant</title>
 </head>
 <body>
 
 <h1>⚖️ AIIP Legal Assistant</h1>
 
-<input type="file" id="file" />
+<input type="file" id="file" accept=".pdf,.docx,.txt" />
 <br><br>
 
-<button id="analyzeBtn">Анализирай</button>
+<button id="analyzeBtn" type="button">Анализирай</button>
 
 <h3>📊 Резултат:</h3>
 <textarea id="output" style="width:100%; height:400px;"></textarea>
 
-<!-- PDF.js -->
 <script src="https://cdnjs.cloudflare.com/ajax/libs/pdf.js/3.11.174/pdf.min.js"></script>
 <script src="https://unpkg.com/tesseract.js@5/dist/tesseract.min.js"></script>
-<!-- Mammoth -->
 <script src="https://unpkg.com/mammoth/mammoth.browser.min.js"></script>
 
 <script>
-pdfjsLib.GlobalWorkerOptions.workerSrc =
-  "https://cdnjs.cloudflare.com/ajax/libs/pdf.js/3.11.174/pdf.worker.min.js";
-
-document.getElementById("analyzeBtn").addEventListener("click", analyze);
-
-// PDF
-async function extractTextFromPDF(file) {
-  const loadingTask = pdfjsLib.getDocument({
-    data: await file.arrayBuffer()
-  });
-
-  const pdf = await loadingTask.promise;
-  let text = "";
-
-  for (let i = 1; i <= pdf.numPages; i++) {
-    const page = await pdf.getPage(i);
-    const content = await page.getTextContent();
-    const strings = content.items.map(item => item.str).join(" ");
-    text += strings + "\n";
+(function () {
+  if (window.pdfjsLib) {
+    pdfjsLib.GlobalWorkerOptions.workerSrc =
+      "https://cdnjs.cloudflare.com/ajax/libs/pdf.js/3.11.174/pdf.worker.min.js";
   }
 
-  // OCR fallback
-  if (text.trim().length < 20) {
-    const worker = await Tesseract.createWorker("bul+eng");
+  async function extractTextFromPDF(file) {
+    const buffer = await file.arrayBuffer();
+    const pdf = await pdfjsLib.getDocument({ data: buffer }).promise;
+    let text = "";
 
     for (let i = 1; i <= pdf.numPages; i++) {
       const page = await pdf.getPage(i);
-      const viewport = page.getViewport({ scale: 2 });
-
-      const canvas = document.createElement("canvas");
-      const context = canvas.getContext("2d");
-
-      canvas.width = viewport.width;
-      canvas.height = viewport.height;
-
-      await page.render({
-        canvasContext: context,
-        viewport
-      }).promise;
-
-      const result = await worker.recognize(canvas);
-      text += result.data.text + "\n";
+      const content = await page.getTextContent();
+      const pageText = content.items.map(item => item.str || "").join(" ").trim();
+      text += pageText + "\n";
     }
 
-    await worker.terminate();
+    if (text.trim().length < 20) {
+      try {
+        const worker = await Tesseract.createWorker("bul+eng");
+        let ocrText = "";
+
+        for (let i = 1; i <= pdf.numPages; i++) {
+          const page = await pdf.getPage(i);
+          const viewport = page.getViewport({ scale: 2 });
+
+          const canvas = document.createElement("canvas");
+          const ctx = canvas.getContext("2d");
+
+          canvas.width = Math.ceil(viewport.width);
+          canvas.height = Math.ceil(viewport.height);
+
+          await page.render({
+            canvasContext: ctx,
+            viewport: viewport
+          }).promise;
+
+          const result = await worker.recognize(canvas);
+          ocrText += (result && result.data && result.data.text ? result.data.text : "") + "\n";
+        }
+
+        await worker.terminate();
+
+        if (ocrText.trim().length > text.trim().length) {
+          text = ocrText;
+        }
+      } catch (e) {
+        console.error("OCR error:", e);
+      }
+    }
+
+    return text.trim();
   }
 
-  return text.trim();
-}
-
-// DOCX
-async function extractTextFromWord(file) {
-  const arrayBuffer = await file.arrayBuffer();
-  const result = await mammoth.extractRawText({ arrayBuffer });
-  return result.value.trim();
-}
-
-// TXT
-async function extractTextFromTxt(file) {
-  return (await file.text()).trim();
-}
-
-// MAIN
-async function analyze() {
-  const output = document.getElementById("output");
-  const fileInput = document.getElementById("file");
-
-  output.value = "⏳ Анализира се...";
-
-  try {
-    if (!fileInput.files.length) {
-      output.value = "❌ Моля качете файл.";
-      return;
-    }
-
-    const file = fileInput.files[0];
-    const name = file.name.toLowerCase();
-    let text = "";
-
-    if (name.endsWith(".pdf")) {
-      text = await extractTextFromPDF(file);
-    } 
-    else if (name.endsWith(".docx")) {
-      text = await extractTextFromWord(file);
-    } 
-    else if (name.endsWith(".txt")) {
-      text = await extractTextFromTxt(file);
-    } 
-    else {
-      output.value = "❌ Поддържат се само PDF, DOCX и TXT.";
-      return;
-    }
-
-    // ПОПРАВЕНО (тук беше проблемът при теб)
-    if (!text || !text.trim()) {
-      output.value = "❌ Няма текст в документа.";
-      return;
-    }
-
-    // ВРЕМЕННО: показва текста (без backend)
-    output.value = text;
-
-  } catch (err) {
-    console.error(err);
-    output.value = "❌ Грешка: " + err.message;
+  async function extractTextFromWord(file) {
+    const arrayBuffer = await file.arrayBuffer();
+    const result = await mammoth.extractRawText({ arrayBuffer: arrayBuffer });
+    return (result.value || "").trim();
   }
-}
+
+  async function extractTextFromTxt(file) {
+    return (await file.text()).trim();
+  }
+
+  async function runAnalyze(event) {
+    if (event) {
+      event.preventDefault();
+      event.stopPropagation();
+      if (event.stopImmediatePropagation) {
+        event.stopImmediatePropagation();
+      }
+    }
+
+    const output = document.getElementById("output");
+    const fileInput = document.getElementById("file");
+
+    output.value = "⏳ Анализира се...";
+
+    try {
+      if (!fileInput || !fileInput.files || fileInput.files.length === 0) {
+        output.value = "❌ Моля качете файл.";
+        return false;
+      }
+
+      const file = fileInput.files[0];
+      const name = (file.name || "").toLowerCase();
+      let text = "";
+
+      if (name.endsWith(".pdf")) {
+        text = await extractTextFromPDF(file);
+      } else if (name.endsWith(".docx")) {
+        text = await extractTextFromWord(file);
+      } else if (name.endsWith(".txt")) {
+        text = await extractTextFromTxt(file);
+      } else {
+        output.value = "❌ Поддържат се само PDF, DOCX и TXT.";
+        return false;
+      }
+
+      if (!text || !text.trim()) {
+        output.value = "❌ Няма текст в документа.";
+        return false;
+      }
+
+      output.value = text;
+      return false;
+    } catch (err) {
+      console.error(err);
+      output.value = "❌ Грешка: " + err.message;
+      return false;
+    }
+  }
+
+  function hardReplaceButton() {
+    const oldBtn = document.getElementById("analyzeBtn");
+    if (!oldBtn) return;
+
+    const newBtn = oldBtn.cloneNode(true);
+    oldBtn.parentNode.replaceChild(newBtn, oldBtn);
+
+    newBtn.addEventListener("click", runAnalyze, true);
+    newBtn.onclick = runAnalyze;
+  }
+
+  if (document.readyState === "loading") {
+    document.addEventListener("DOMContentLoaded", hardReplaceButton);
+  } else {
+    hardReplaceButton();
+  }
+
+  window.analyze = runAnalyze;
+})();
 </script>
 
 </body>
