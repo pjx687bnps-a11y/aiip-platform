@@ -8,61 +8,96 @@ pdfjsLib.GlobalWorkerOptions.workerSrc =
 
 document.getElementById("analyzeBtn").addEventListener("click", analyze);
 
-// PDF extractor
 async function extractTextFromPDF(file) {
-  const loadingTask = pdfjsLib.getDocument({
-    data: await file.arrayBuffer()
-  });
-
-  const pdf = await loadingTask.promise;
   let text = "";
 
-  for (let i = 1; i <= pdf.numPages; i++) {
-    const page = await pdf.getPage(i);
-    const content = await page.getTextContent();
-    const strings = content.items.map(item => item.str).join(" ");
-    text += strings + "\n";
-  }
+  try {
+    const buffer = await file.arrayBuffer();
+    const pdf = await pdfjsLib.getDocument({ data: buffer }).promise;
 
-  // Ако PDF е сканиран и няма текст -> OCR
-  if (text.trim().length < 20) {
-    const worker = await Tesseract.createWorker("bul+eng");
+    console.log("PDF pages:", pdf.numPages);
 
     for (let i = 1; i <= pdf.numPages; i++) {
       const page = await pdf.getPage(i);
-      const viewport = page.getViewport({ scale: 2 });
+      const content = await page.getTextContent();
 
-      const canvas = document.createElement("canvas");
-      const context = canvas.getContext("2d");
+      const pageText = content.items
+        .map(item => item.str)
+        .join(" ")
+        .trim();
 
-      canvas.width = viewport.width;
-      canvas.height = viewport.height;
-
-      await page.render({
-        canvasContext: context,
-        viewport
-      }).promise;
-
-      const result = await worker.recognize(canvas);
-      text += result.data.text + "\n";
+      text += pageText + "\n";
     }
 
-    await worker.terminate();
+    console.log("PDF extracted length:", text.trim().length);
+
+    // fallback OCR if parsed text is too short
+    if (text.trim().length < 30) {
+      console.log("Starting OCR fallback...");
+
+      const worker = await Tesseract.createWorker("bul+eng");
+
+      let ocrText = "";
+
+      for (let i = 1; i <= pdf.numPages; i++) {
+        const page = await pdf.getPage(i);
+        const viewport = page.getViewport({ scale: 2 });
+
+        const canvas = document.createElement("canvas");
+        const ctx = canvas.getContext("2d");
+
+        canvas.width = viewport.width;
+        canvas.height = viewport.height;
+
+        await page.render({
+          canvasContext: ctx,
+          viewport
+        }).promise;
+
+        const result = await worker.recognize(canvas);
+        ocrText += result.data.text + "\n";
+      }
+
+      await worker.terminate();
+
+      if (ocrText.trim().length > text.trim().length) {
+        text = ocrText;
+      }
+
+      console.log("OCR extracted length:", text.trim().length);
+    }
+
+    return text.trim();
+  } catch (err) {
+    console.error("PDF extraction error:", err);
+    throw new Error("Грешка при четене на PDF: " + err.message);
   }
-
-  return text.trim();
 }
 
-// DOCX extractor
 async function extractTextFromWord(file) {
-  const arrayBuffer = await file.arrayBuffer();
-  const result = await mammoth.extractRawText({ arrayBuffer });
-  return result.value.trim();
+  try {
+    const arrayBuffer = await file.arrayBuffer();
+    const result = await mammoth.extractRawText({ arrayBuffer });
+
+    console.log("DOCX extracted length:", (result.value || "").trim().length);
+    console.log("DOCX messages:", result.messages);
+
+    return (result.value || "").trim();
+  } catch (err) {
+    console.error("DOCX extraction error:", err);
+    throw new Error("Грешка при четене на DOCX: " + err.message);
+  }
 }
 
-// TXT extractor
 async function extractTextFromTxt(file) {
-  return (await file.text()).trim();
+  try {
+    const text = await file.text();
+    console.log("TXT extracted length:", text.trim().length);
+    return text.trim();
+  } catch (err) {
+    console.error("TXT extraction error:", err);
+    throw new Error("Грешка при четене на TXT: " + err.message);
+  }
 }
 
 async function analyze() {
@@ -81,7 +116,10 @@ async function analyze() {
     const fileName = file.name.toLowerCase();
     let text = "";
 
-    // Разпознаване на файла
+    console.log("File name:", file.name);
+    console.log("File type:", file.type);
+    console.log("File size:", file.size);
+
     if (file.type === "application/pdf" || fileName.endsWith(".pdf")) {
       text = await extractTextFromPDF(file);
     } else if (
@@ -89,29 +127,35 @@ async function analyze() {
       fileName.endsWith(".docx")
     ) {
       text = await extractTextFromWord(file);
-    } else if (
-      file.type === "text/plain" ||
-      fileName.endsWith(".txt")
-    ) {
+    } else if (file.type === "text/plain" || fileName.endsWith(".txt")) {
       text = await extractTextFromTxt(file);
     } else {
       output.value = "❌ Поддържат се PDF, DOCX и TXT файлове.";
       return;
     }
 
-    if (!text || text.trim().length < 10) {
-      output.value = "❌ Неуспешно извличане на текст от документа.";
+    if (!text || text.trim().length < 5) {
+      output.value =
+        "❌ Не можа да се извлече текст.\n\n" +
+        "Провери дали:\n" +
+        "- PDF файлът не е само снимка\n" +
+        "- DOCX файлът не е повреден\n" +
+        "- файлът съдържа реален текст\n\n" +
+        "Отвори Developer Console (F12) и виж логовете.";
       return;
     }
 
-    console.log("EXTRACTED TEXT:", text);
+    console.log("FINAL EXTRACTED TEXT:", text);
 
     const res = await fetch("/api/analyze", {
       method: "POST",
       headers: {
         "Content-Type": "application/json"
       },
-      body: JSON.stringify({ text, fileName: file.name })
+      body: JSON.stringify({
+        text,
+        fileName: file.name
+      })
     });
 
     const rawResponse = await res.text();
@@ -129,9 +173,9 @@ async function analyze() {
       return;
     }
 
-    output.value = data.result || data.analysis || "❌ Няма резултат от анализа.";
+    output.value = data.result || data.analysis || "✅ Текстът е извлечен, но няма върнат анализ.";
   } catch (err) {
-    console.error(err);
+    console.error("ANALYZE ERROR:", err);
     output.value = "❌ Грешка: " + err.message;
   }
 }
