@@ -26,6 +26,25 @@ document.getElementById("analyzeBtn").addEventListener("click", analyze);
 
 // 📄 PDF extractor (истински)
 async function extractTextFromPDF(file) {
+  const loadingTask = pdfjsLib.getDocument({
+    data: await file.arrayBuffer()
+  });
+
+  const pdf = await loadingTask.promise;
+
+  let text = "";
+
+  for (let i = 1; i <= pdf.numPages; i++) {
+    const page = await pdf.getPage(i);
+    const content = await page.getTextContent();
+
+    const strings = content.items.map(item => item.str);
+
+    text += strings.join(" ") + "\n";
+  }
+
+  return text.trim();
+}
   const pdf = await pdfjsLib.getDocument(await file.arrayBuffer()).promise;
   let text = "";
 
@@ -74,7 +93,7 @@ async function analyze() {
     }
 
     // 🧠 защита
-    if (!text || text.length < 30) {
+   if (!text || text.trim().length < 10)
       output.value = "❌ Неуспешно извличане на текст от документа.";
       return;
     }
