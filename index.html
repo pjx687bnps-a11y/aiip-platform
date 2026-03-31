@@ -1,193 +1,149 @@
 <!DOCTYPE html>
-<html>
+<html lang="bg">
 <head>
+  <meta charset="UTF-8" />
   <title>⚖️ AIIP Legal Assistant</title>
 </head>
 <body>
 
-<h1>⚖️ AIIP Legal Assistant</h1>
+  <h1>⚖️ AIIP Legal Assistant</h1>
 
-<input type="file" id="file" />
-<br><br>
+  <input type="file" id="file" accept=".pdf,.docx" />
+  <br><br>
 
-<button id="analyzeBtn">Анализирай</button>
+  <button id="analyzeBtn">Анализирай</button>
 
-<h3>📊 Резултат:</h3>
-<textarea id="output" style="width:100%; height:400px;"></textarea>
+  <h3>📊 Резултат:</h3>
+  <textarea id="output" style="width:100%; height:400px;"></textarea>
 
-<!-- PDF.js -->
-<script src="https://cdnjs.cloudflare.com/ajax/libs/pdf.js/3.11.174/pdf.min.js"></script>
-<script src="https://unpkg.com/tesseract.js@5/dist/tesseract.min.js"></script>
-<!-- Mammoth (Word parser) -->
-<script src="https://unpkg.com/mammoth/mammoth.browser.min.js"></script>
+  <!-- PDF.js -->
+  <script src="https://cdnjs.cloudflare.com/ajax/libs/pdf.js/3.11.174/pdf.min.js"></script>
+  <script src="https://unpkg.com/tesseract.js@5/dist/tesseract.min.js"></script>
 
-<script>
-document.getElementById("analyzeBtn").addEventListener("click", analyze);
+  <!-- Mammoth for DOCX -->
+  <script src="https://unpkg.com/mammoth/mammoth.browser.min.js"></script>
 
-// 📄 PDF extractor (истински)
-async function extractTextFromPDF(file) {
-  const loadingTask = pdfjsLib.getDocument({
-    data: await file.arrayBuffer()
-  });
+  <script>
+    pdfjsLib.GlobalWorkerOptions.workerSrc =
+      "https://cdnjs.cloudflare.com/ajax/libs/pdf.js/3.11.174/pdf.worker.min.js";
 
-  const pdf = await loadingTask.promise;
+    document.getElementById("analyzeBtn").addEventListener("click", analyze);
 
-  let text = "";
+    // PDF extractor
+    async function extractTextFromPDF(file) {
+      const loadingTask = pdfjsLib.getDocument({
+        data: await file.arrayBuffer()
+      });
 
-  for (let i = 1; i <= pdf.numPages; i++) {
-    const page = await pdf.getPage(i);
-    const content = await page.getTextContent();
+      const pdf = await loadingTask.promise;
+      let text = "";
 
-    const strings = content.items.map(item => item.str).join(" ");
+      for (let i = 1; i <= pdf.numPages; i++) {
+        const page = await pdf.getPage(i);
+        const content = await page.getTextContent();
+        const strings = content.items.map(item => item.str).join(" ");
+        text += strings + "\n";
+      }
 
-    text += strings + "\n";
-  }
+      // Ако PDF е сканиран и няма достатъчно текст → OCR
+      if (text.trim().length < 20) {
+        console.log("OCR START");
 
-  // 👉 ако няма текст → OCR
-  if (text.trim().length < 20) {
-    console.log("OCR START");
+        const worker = await Tesseract.createWorker("bul+eng");
 
-    const worker = await Tesseract.createWorker("bul+eng");
+        for (let i = 1; i <= pdf.numPages; i++) {
+          const page = await pdf.getPage(i);
+          const viewport = page.getViewport({ scale: 2 });
 
-    for (let i = 1; i <= pdf.numPages; i++) {
-      const page = await pdf.getPage(i);
-      const viewport = page.getViewport({ scale: 2 });
+          const canvas = document.createElement("canvas");
+          const context = canvas.getContext("2d");
 
-      const canvas = document.createElement("canvas");
-      const context = canvas.getContext("2d");
+          canvas.width = viewport.width;
+          canvas.height = viewport.height;
 
-      canvas.width = viewport.width;
-      canvas.height = viewport.height;
+          await page.render({
+            canvasContext: context,
+            viewport
+          }).promise;
 
-      await page.render({
-        canvasContext: context,
-        viewport
-      }).promise;
+          const result = await worker.recognize(canvas);
+          text += result.data.text + "\n";
+        }
 
-      const result = await worker.recognize(canvas);
+        await worker.terminate();
+      }
 
-      text += result.data.text + "\n";
+      return text.trim();
     }
 
-    await worker.terminate();
-  }
-
-  return text.trim();
-}
-  const loadingTask = pdfjsLib.getDocument({
-    data: await file.arrayBuffer()
-  });
-
-  const pdf = await loadingTask.promise;
-
-  let text = "";
-
-  for (let i = 1; i <= pdf.numPages; i++) {
-    const page = await pdf.getPage(i);
-    const content = await page.getTextContent();
-
-    const strings = content.items.map(item => item.str);
-
-    text += strings.join(" ") + "\n";
-  }
-
-  return text.trim();
-}
-  const pdf = await pdfjsLib.getDocument(await file.arrayBuffer()).promise;
-  let text = "";
-
-  for (let i = 1; i <= pdf.numPages; i++) {
-    const page = await pdf.getPage(i);
-    const content = await page.getTextContent();
-    text += content.items.map(item => item.str).join(" ") + "\n";
-  }
-
-  return text;
-}
-
-// 📄 Word extractor (PRO)
-async function extractTextFromWord(file) {
-  const arrayBuffer = await file.arrayBuffer();
-  const result = await mammoth.extractRawText({ arrayBuffer });
-  return result.value;
-}
-
-async function analyze() {
-  const output = document.getElementById("output");
-  const fileInput = document.getElementById("file");
-
-  output.value = "⏳ Анализира се...";
-
-  try {
-    let text = "";
-
-    if (fileInput.files.length === 0) {
-      output.value = "❌ Моля качете PDF или Word документ.";
-      return;
+    // DOCX extractor
+    async function extractTextFromWord(file) {
+      const arrayBuffer = await file.arrayBuffer();
+      const result = await mammoth.extractRawText({ arrayBuffer });
+      return result.value.trim();
     }
 
-    const file = fileInput.files[0];
+    async function analyze() {
+      const output = document.getElementById("output");
+      const fileInput = document.getElementById("file");
 
-    // 🔍 Разпознаване на тип файл
-    if (file.type === "application/pdf") {
-      text = await extractTextFromPDF(file);
-    } 
-    else if (file.name.endsWith(".docx")) {
-      text = await extractTextFromWord(file);
-    } 
-    else {
-      output.value = "❌ Поддържат се само PDF и DOCX файлове.";
-      return;
+      output.value = "⏳ Анализира се...";
+
+      try {
+        if (fileInput.files.length === 0) {
+          output.value = "❌ Моля качете PDF или DOCX документ.";
+          return;
+        }
+
+        const file = fileInput.files[0];
+        let text = "";
+
+        // PDF
+        if (file.type === "application/pdf" || file.name.toLowerCase().endsWith(".pdf")) {
+          text = await extractTextFromPDF(file);
+        }
+        // DOCX
+        else if (
+          file.type === "application/vnd.openxmlformats-officedocument.wordprocessingml.document" ||
+          file.name.toLowerCase().endsWith(".docx")
+        ) {
+          text = await extractTextFromWord(file);
+        }
+        else {
+          output.value = "❌ Поддържат се само PDF и DOCX файлове.";
+          return;
+        }
+
+        if (!text || text.trim().length < 10) {
+          output.value = "❌ Неуспешно извличане на текст от документа.";
+          return;
+        }
+
+        console.log("EXTRACTED TEXT:", text);
+
+        const res = await fetch("/api/analyze", {
+          method: "POST",
+          headers: {
+            "Content-Type": "application/json"
+          },
+          body: JSON.stringify({ text })
+        });
+
+        const responseText = await res.text();
+
+        try {
+          const data = JSON.parse(responseText);
+          output.value = data.result || ("❌ " + (data.error || "Няма резултат."));
+        } catch {
+          output.value = "❌ Server error:\n" + responseText;
+        }
+
+      } catch (err) {
+        console.error(err);
+        output.value = "❌ Грешка: " + err.message;
+      }
     }
-
-    // 🧠 защита
-   if (!text || text.trim().length < 10)
-      output.value = "❌ Неуспешно извличане на текст от документа.";
-      return;
-    }
-
-    console.log("EXTRACTED TEXT:", text);
-
-    // 📡 изпращане към backend
-    const res = await fetch("/api/analyze", {
-      method: "POST",
-      headers: {
-        "Content-Type": "application/json"
-      },
-      body: JSON.stringify({ text })
-    });
-
-    const textResponse = await res.text();
-
-try {
- const responseText = await res.text();
-
-try {
- const responseText = await res.text();
-
-try {
-  const data = JSON.parse(responseText);
-  output.value = data.result || "❌ " + data.error;
-} catch {
-  output.value = "❌ Server error:\n" + responseText;
-}
-  output.value = data.result || "❌ " + data.error;
-} catch (e) {
-  output.value = "❌ Server error:\n" + responseText;
-}
-  output.value = data.result || "❌ " + data.error;
-} catch {
-  output.value = "❌ Server error:\n" + textResponse;
-}
-
-    output.value = data.result || "❌ " + data.error;
-
-  } catch (err) {
-    console.error(err);
-    output.value = "❌ Грешка: " + err.message;
-  }
-}
-</script>
+  </script>
 
 </body>
 </html>
