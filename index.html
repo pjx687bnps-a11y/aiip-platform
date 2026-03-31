@@ -163,7 +163,14 @@ try {
  const responseText = await res.text();
 
 try {
+ const responseText = await res.text();
+
+try {
   const data = JSON.parse(responseText);
+  output.value = data.result || "❌ " + data.error;
+} catch {
+  output.value = "❌ Server error:\n" + responseText;
+}
   output.value = data.result || "❌ " + data.error;
 } catch (e) {
   output.value = "❌ Server error:\n" + responseText;
