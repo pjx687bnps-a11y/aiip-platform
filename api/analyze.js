@@ -1,48 +1,46 @@
 export default async function handler(req, res) {
-  const apiKey = process.env.OPENAI_API_KEY;
-
-  if (req.method !== "POST") {
-    return res.status(405).json({ error: "Method not allowed" });
-  }
-
   try {
-    const response = await fetch("https://api.openai.com/v1/chat/completions", {
+    const { text } = req.body;
+
+    if (!text) {
+      return res.status(400).json({ error: "No text provided" });
+    }
+
+    const prompt = `
+Анализирай юридически текста:
+
+1. Факти
+2. Правни проблеми
+3. Противоречия
+4. Неправилно приложение на закона
+5. Логически грешки
+6. ЕС съответствие
+7. Вероятност за успех (%)
+8. Генерирай жалба
+
+Текст:
+${text}
+`;
+
+    const ai = await fetch("https://api.openai.com/v1/chat/completions", {
       method: "POST",
       headers: {
-        "Content-Type": "application/json",
-        "Authorization": "Bearer " + apiKey,
+        "Authorization": `Bearer ${process.env.OPENAI_API_KEY}`,
+        "Content-Type": "application/json"
       },
       body: JSON.stringify({
-        model: "gpt-4o-mini",
-        messages: [
-          {
-            role: "system",
-            content: `You are a senior legal expert.
-
-Analyze the document and provide:
-
-1. Facts
-2. Legal errors
-3. Risk score (1-10)
-4. Recommendations
-
-Be structured and precise.`,
-          },
-          {
-            role: "user",
-            content: req.body.text,
-          },
-        ],
-      }),
+        model: "gpt-4.1",
+        messages: [{ role: "user", content: prompt }]
+      })
     });
 
-    const data = await response.json();
+    const data = await ai.json();
 
     res.status(200).json({
-      result: data.choices?.[0]?.message?.content || "No response",
+      result: data.choices[0].message.content
     });
 
-  } catch (error) {
-    res.status(500).json({ error: "Something went wrong" });
+  } catch (err) {
+    res.status(500).json({ error: err.message });
   }
 }
