@@ -1,14 +1,13 @@
 <!DOCTYPE html>
-<html lang="bg">
+<html>
 <head>
-  <meta charset="UTF-8">
   <title>⚖️ AIIP Legal Assistant</title>
 </head>
 <body>
 
 <h1>⚖️ AIIP Legal Assistant</h1>
 
-<input type="file" id="file" accept=".pdf,.docx,.txt">
+<input type="file" id="file" />
 <br><br>
 
 <button id="analyzeBtn">Анализирай</button>
@@ -16,60 +15,58 @@
 <h3>📊 Резултат:</h3>
 <textarea id="output" style="width:100%; height:400px;"></textarea>
 
-<!-- библиотеки -->
+<!-- PDF.js -->
 <script src="https://cdnjs.cloudflare.com/ajax/libs/pdf.js/3.11.174/pdf.min.js"></script>
 <script src="https://unpkg.com/tesseract.js@5/dist/tesseract.min.js"></script>
+<!-- Mammoth -->
 <script src="https://unpkg.com/mammoth/mammoth.browser.min.js"></script>
 
 <script>
 pdfjsLib.GlobalWorkerOptions.workerSrc =
   "https://cdnjs.cloudflare.com/ajax/libs/pdf.js/3.11.174/pdf.worker.min.js";
 
-document.getElementById("analyzeBtn").onclick = analyze;
+document.getElementById("analyzeBtn").addEventListener("click", analyze);
 
 // PDF
 async function extractTextFromPDF(file) {
-  const buffer = await file.arrayBuffer();
-  const pdf = await pdfjsLib.getDocument({ data: buffer }).promise;
+  const loadingTask = pdfjsLib.getDocument({
+    data: await file.arrayBuffer()
+  });
 
+  const pdf = await loadingTask.promise;
   let text = "";
 
   for (let i = 1; i <= pdf.numPages; i++) {
     const page = await pdf.getPage(i);
     const content = await page.getTextContent();
-    text += content.items.map(item => item.str || "").join(" ") + "\n";
+    const strings = content.items.map(item => item.str).join(" ");
+    text += strings + "\n";
   }
 
   // OCR fallback
   if (text.trim().length < 20) {
-    try {
-      const worker = await Tesseract.createWorker("bul+eng");
-      let ocrText = "";
+    const worker = await Tesseract.createWorker("bul+eng");
 
-      for (let i = 1; i <= pdf.numPages; i++) {
-        const page = await pdf.getPage(i);
-        const viewport = page.getViewport({ scale: 2 });
+    for (let i = 1; i <= pdf.numPages; i++) {
+      const page = await pdf.getPage(i);
+      const viewport = page.getViewport({ scale: 2 });
 
-        const canvas = document.createElement("canvas");
-        const ctx = canvas.getContext("2d");
+      const canvas = document.createElement("canvas");
+      const context = canvas.getContext("2d");
 
-        canvas.width = viewport.width;
-        canvas.height = viewport.height;
+      canvas.width = viewport.width;
+      canvas.height = viewport.height;
 
-        await page.render({ canvasContext: ctx, viewport }).promise;
+      await page.render({
+        canvasContext: context,
+        viewport
+      }).promise;
 
-        const result = await worker.recognize(canvas);
-        ocrText += result.data.text + "\n";
-      }
-
-      await worker.terminate();
-
-      if (ocrText.trim().length > text.trim().length) {
-        text = ocrText;
-      }
-    } catch (e) {
-      console.error(e);
+      const result = await worker.recognize(canvas);
+      text += result.data.text + "\n";
     }
+
+    await worker.terminate();
   }
 
   return text.trim();
@@ -77,9 +74,9 @@ async function extractTextFromPDF(file) {
 
 // DOCX
 async function extractTextFromWord(file) {
-  const buffer = await file.arrayBuffer();
-  const result = await mammoth.extractRawText({ arrayBuffer: buffer });
-  return (result.value || "").trim();
+  const arrayBuffer = await file.arrayBuffer();
+  const result = await mammoth.extractRawText({ arrayBuffer });
+  return result.value.trim();
 }
 
 // TXT
@@ -96,7 +93,7 @@ async function analyze() {
 
   try {
     if (!fileInput.files.length) {
-      output.value = "❌ Качи файл";
+      output.value = "❌ Моля качете файл.";
       return;
     }
 
@@ -106,20 +103,25 @@ async function analyze() {
 
     if (name.endsWith(".pdf")) {
       text = await extractTextFromPDF(file);
-    } else if (name.endsWith(".docx")) {
+    } 
+    else if (name.endsWith(".docx")) {
       text = await extractTextFromWord(file);
-    } else if (name.endsWith(".txt")) {
+    } 
+    else if (name.endsWith(".txt")) {
       text = await extractTextFromTxt(file);
-    } else {
-      output.value = "❌ Само PDF, DOCX, TXT";
+    } 
+    else {
+      output.value = "❌ Поддържат се само PDF, DOCX и TXT.";
       return;
     }
 
-    if (!text) {
-      output.value = "❌ Няма текст в документа";
+    // ПОПРАВЕНО (тук беше проблемът при теб)
+    if (!text || !text.trim()) {
+      output.value = "❌ Няма текст в документа.";
       return;
     }
 
+    // ВРЕМЕННО: показва текста (без backend)
     output.value = text;
 
   } catch (err) {
