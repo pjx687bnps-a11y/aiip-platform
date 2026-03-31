@@ -44,21 +44,6 @@ const extractionPrompt = `
 Текст:
 ${text}
 `;
-
-Върни JSON:
-
-{
-  "persons": [],
-  "institutions": [],
-  "dates": [],
-  "case_numbers": [],
-  "facts_summary": ""
-}
-
-Текст:
-${text}
-`;
-
     const extractionRes = await fetch("https://api.openai.com/v1/chat/completions", {
       method: "POST",
       headers: {
@@ -86,7 +71,10 @@ try {
   const raw = extractionData.choices[0].message.content;
 
   // 🧠 чистим markdown ако има
-  const cleaned = raw.replace(/```json|```/g, "").trim();
+  const cleaned = raw
+  .replace(/```json|```/g, "")
+  .replace(/\n/g, " ")
+  .trim();
 
   extracted = JSON.parse(cleaned);
 
@@ -96,12 +84,6 @@ try {
     raw: extractionData.choices[0].message.content
   };
 }
-    try {
-      extracted = JSON.parse(extractionData.choices[0].message.content);
-    } catch {
-      extracted = { raw: extractionData.choices[0].message.content };
-    }
-
     // 🔥 STEP 2: ADVANCED LEGAL ANALYSIS
     const analysisPrompt = `
 Ти си елитен адвокат по наказателно право, работещ по сложни дела срещу прокуратурата и с опит по ЕСПЧ.
