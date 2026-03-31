@@ -1,72 +1,48 @@
 export default async function handler(req, res) {
   try {
-    // 🧠 Парсване на body (ВАЖНО за Vercel)
-    const body =
-      typeof req.body === "string" ? JSON.parse(req.body) : req.body;
+    let text = "";
 
-let text = "";
+    // 🧠 ВАЖНО: Vercel НЕ поддържа директно multipart parsing така
+    // затова засега работим само с text
 
-// 📄 ако идва файл
-if (req.headers["content-type"]?.includes("multipart/form-data")) {
-  const chunks = [];
+    if (req.body) {
+      const body =
+        typeof req.body === "string" ? JSON.parse(req.body) : req.body;
 
-  for await (const chunk of req) {
-    chunks.push(chunk);
-  }
-
-  const buffer = Buffer.concat(chunks);
-  text = buffer.toString();
-}
-
-// 🧠 ако идва текст (стария вариант)
-else {
-  const body =
-    typeof req.body === "string" ? JSON.parse(req.body) : req.body;
-
-  text = body?.text || "";
-}
-
-if (!text) {
-  return res.status(400).json({ error: "No input provided" });
-}
-
-    if (!text) {
-      return res.status(400).json({ error: "No text provided" });
+      text = body?.text || "";
     }
 
-    // 🧠 PROMPT (ъпгрейднат)
+    if (!text) {
+      return res.status(400).json({
+        error: "⚠️ Качването на файлове още не е активирано. Постави текст за тест."
+      });
+    }
+
     const prompt = `
 Ти си професионален юридически анализатор.
 
-1. Извлечи от текста:
-- Имена на лица
-- ЕГН/идентификатори
+1. Извлечи:
+- Имена
+- ЕГН
 - Дати
-- Номер на преписка/дело
-- Институции
+- Номер на дело
 
-2. Направи юридически анализ:
+2. Анализ:
 - Факти
-- Правни проблеми
+- Проблеми
 - Противоречия
-- Неправилно приложение на закона
-- Логически грешки
-- Съответствие с ЕС право
+- Грешки
 
-3. Оцени:
+3. Оценка:
 - Законосъобразност (1–10)
-- Вероятност за успех (%)
+- Успех (%)
 
-4. Генерирай ЖАЛБА:
-- използвай реалните данни
-- формален юридически стил
-- без празни полета
+4. Генерирай жалба
 
 Текст:
 ${text}
 `;
 
-    // 🔥 OpenAI заявка
     const ai = await fetch("https://api.openai.com/v1/chat/completions", {
       method: "POST",
       headers: {
@@ -79,32 +55,21 @@ ${text}
       })
     });
 
-    // 🧠 SAFE parsing
     const data = await ai.json();
 
-    // ❌ ако API върне грешка
     if (!ai.ok) {
       return res.status(500).json({
         error: data.error?.message || "OpenAI API error"
       });
     }
 
-    // ❌ ако няма отговор
-    if (!data.choices || !data.choices[0]) {
-      return res.status(500).json({
-        error: "Invalid AI response"
-      });
-    }
-
-    // ✅ успех
     return res.status(200).json({
       result: data.choices[0].message.content
     });
 
   } catch (err) {
-    // 🛑 ще виждаш реалната грешка вече
     return res.status(500).json({
-      error: err.message || "Server error"
+      error: err.message
     });
   }
 }
