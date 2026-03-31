@@ -42,6 +42,18 @@ async function analyze() {
 
   output.value = "⏳ Анализира се...";
 
+  const res = await fetch("/api/analyze", {
+    method: "POST",
+  });
+
+  const data = await res.json();
+
+  output.value = data.result;
+}
+  const output = document.getElementById("output");
+
+  output.value = "⏳ Анализира се...";
+
   const apiKey = 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
 
   const response = await fetch("https://api.openai.com/v1/chat/completions", {
