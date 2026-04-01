@@ -16,7 +16,7 @@
 <h3>📊 Резултат:</h3>
 <textarea id="output" style="width:100%; height:400px;"></textarea>
 
-<!-- По-стабилни CDN -->
+<!-- CDN -->
 <script src="https://cdn.jsdelivr.net/npm/pdfjs-dist@3.11.174/build/pdf.min.js"></script>
 <script src="https://unpkg.com/tesseract.js@5/dist/tesseract.min.js"></script>
 <script src="https://unpkg.com/mammoth/mammoth.browser.min.js"></script>
@@ -24,7 +24,7 @@
 <script>
 (function () {
 
-  // ✅ INIT
+  // INIT
   if (!window.pdfjsLib) {
     alert("❌ pdf.js не е зареден");
     return;
@@ -88,6 +88,13 @@
       }
     }
 
+    // CLEANUP (safe)
+    text = text
+      .replace(/\s+/g, " ")
+      .replace(/CBABT/g, "Съдът")
+      .replace(/MapKa/g, "марка")
+      .replace(/3HaK/g, "знак");
+
     return text.trim();
   }
 
@@ -148,55 +155,37 @@
         return;
       }
 
-if (!text) {
-  show("❌ Няма текст.");
-  return;
-}
-
-// ограничение
-if (text.length > 20000) {
-  text = text.slice(0, 20000);
-}
-
-show("🧠 AI анализ...");
-
-const response = await fetch("https://YOUR_PROJECT.supabase.co/functions/v1/analyze", {
-  method: "POST",
-  headers: {
-    "Content-Type": "application/json",
-  },
-  body: JSON.stringify({
-    text: text
-  })
-});
-
-const data = await response.json();
-
-if (!response.ok) {
-  throw new Error(data.error || "AI грешка");
-}
-
-show(data.result);
-  method: "POST",
-  headers: {
-    "Content-Type": "application/json",
-  },
-  body: JSON.stringify({
-    text: text
-  })
-});
-
-const data = await response.json();
-
-if (!response.ok) {
-  throw new Error(data.error || "AI грешка");
-}
-
-show(data.result);
+      if (!text) {
+        show("❌ Няма текст.");
         return;
       }
 
-      show(text);
+      // limit
+      if (text.length > 20000) {
+        text = text.slice(0, 20000);
+      }
+
+      console.log("TEXT LENGTH:", text.length);
+
+      show("🧠 AI анализ...");
+
+      const response = await fetch("https://YOUR_PROJECT.supabase.co/functions/v1/analyze", {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+        },
+        body: JSON.stringify({
+          text: text
+        })
+      });
+
+      const data = await response.json();
+
+      if (!response.ok) {
+        throw new Error(data.error || "AI грешка");
+      }
+
+      show(data.result);
 
     } catch (err) {
       console.error(err);
@@ -207,7 +196,6 @@ show(data.result);
     }
   }
 
-  // ✅ САМО ТОВА (без hacks)
   btn.onclick = runNewAnalyze;
 
   show("✅ Готово. Качи файл и натисни „Анализирай“.");
