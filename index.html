@@ -5,20 +5,21 @@ document.addEventListener("DOMContentLoaded", () => {
   const btn = document.getElementById("analyzeBtn");
   const fileInput = document.getElementById("file");
 
+  // ❗ НЕ СПИРАМЕ SCRIPT-А
   if (!output || !btn || !fileInput) {
-    console.error("❌ Липсват DOM елементи");
-    return;
+    console.error("❌ Липсват DOM елементи", {
+      output,
+      btn,
+      fileInput
+    });
   }
 
   let isRunning = false;
 
   const show = (msg) => {
-    output.value = msg || "";
+    if (output) output.value = msg || "";
   };
 
-  // =====================
-  // GARBAGE DETECTOR
-  // =====================
   const isGarbage = (text) => {
     if (!text) return true;
 
@@ -33,9 +34,6 @@ document.addEventListener("DOMContentLoaded", () => {
     return false;
   };
 
-  // =====================
-  // PDF
-  // =====================
   const extractTextFromPDF = async (file) => {
 
     if (typeof pdfjsLib === "undefined") {
@@ -57,11 +55,6 @@ document.addEventListener("DOMContentLoaded", () => {
     }
 
     if (text.trim().length > 100) return text.trim();
-
-    // OCR fallback
-    if (typeof Tesseract === "undefined") {
-      throw new Error("Tesseract не е зареден");
-    }
 
     const worker = await Tesseract.createWorker();
     await worker.loadLanguage("bul");
@@ -96,30 +89,19 @@ document.addEventListener("DOMContentLoaded", () => {
     return ocrText.trim();
   };
 
-  // =====================
-  // WORD
-  // =====================
   const extractTextFromWord = async (file) => {
-    if (typeof mammoth === "undefined") {
-      throw new Error("mammoth не е зареден");
-    }
-
     const buffer = await file.arrayBuffer();
     const result = await mammoth.extractRawText({ arrayBuffer: buffer });
     return (result.value || "").trim();
   };
 
-  // =====================
-  // TXT
-  // =====================
   const extractTextFromTxt = async (file) => {
     return (await file.text()).trim();
   };
 
-  // =====================
-  // MAIN
-  // =====================
   const run = async (e) => {
+
+    if (!btn || !fileInput) return;
 
     if (isRunning) return;
 
@@ -156,7 +138,6 @@ document.addEventListener("DOMContentLoaded", () => {
 
       show("🧠 Анализиране...");
 
-      // 🔥 КРИТИЧЕН FIX: абсолютен URL (работи и локално)
       const res = await fetch("/api/analyze", {
         method: "POST",
         headers: {
@@ -165,9 +146,8 @@ document.addEventListener("DOMContentLoaded", () => {
         body: JSON.stringify({ text })
       });
 
-      // 🔥 FIX: защита ако API върне HTML вместо JSON
       const data = await res.json().catch(() => {
-        throw new Error("API не върна валиден JSON (провери /api/analyze)");
+        throw new Error("API не върна JSON");
       });
 
       if (!res.ok) {
@@ -186,11 +166,13 @@ document.addEventListener("DOMContentLoaded", () => {
       show("❌ " + err.message);
     } finally {
       isRunning = false;
-      btn.disabled = false;
+      if (btn) btn.disabled = false;
     }
   };
 
-  btn.addEventListener("click", run);
+  if (btn) {
+    btn.addEventListener("click", run);
+  }
 
   show("✅ Готово. Качи файл и натисни „Анализирай“.");
 
