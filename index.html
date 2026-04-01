@@ -1,30 +1,6 @@
-<!DOCTYPE html>
-<html lang="bg">
-<head>
-  <meta charset="UTF-8">
-  <title>⚖️ AIIP Legal Assistant</title>
-</head>
-<body>
-
-<h1>⚖️ AIIP Legal Assistant</h1>
-
-<input type="file" id="file" accept=".pdf,.docx,.txt" />
-<br><br>
-
-<button id="analyzeBtn" type="button">Анализирай</button>
-
-<h3>📊 Резултат:</h3>
-<textarea id="output" style="width:100%; height:400px;"></textarea>
-
-<!-- По-стабилни CDN -->
-<script src="https://cdn.jsdelivr.net/npm/pdfjs-dist@3.11.174/build/pdf.min.js"></script>
-<script src="https://unpkg.com/tesseract.js@5/dist/tesseract.min.js"></script>
-<script src="https://unpkg.com/mammoth/mammoth.browser.min.js"></script>
-
 <script>
 (function () {
 
-  // ✅ INIT
   if (!window.pdfjsLib) {
     alert("❌ pdf.js не е зареден");
     return;
@@ -42,6 +18,16 @@
     output.value = msg;
   }
 
+  // ✅ DETECT GARBAGE
+  function isGarbage(text) {
+    if (!text) return true;
+
+    const badChars = text.match(/[A-Z]{3,}/g) || [];
+    const ratio = badChars.length / text.length;
+
+    return ratio > 0.05;
+  }
+
   // =====================
   // PDF
   // =====================
@@ -57,38 +43,51 @@
       text += content.items.map(i => i.str || "").join(" ") + "\n";
     }
 
-    // OCR fallback
-    if (text.trim().length < 20) {
-      const worker = await Tesseract.createWorker();
-      await worker.loadLanguage("bul+eng");
-      await worker.initialize("bul+eng");
-
-      let ocrText = "";
-
-      for (let i = 1; i <= pdf.numPages; i++) {
-        const page = await pdf.getPage(i);
-        const viewport = page.getViewport({ scale: 2 });
-
-        const canvas = document.createElement("canvas");
-        const ctx = canvas.getContext("2d");
-
-        canvas.width = viewport.width;
-        canvas.height = viewport.height;
-
-        await page.render({ canvasContext: ctx, viewport }).promise;
-
-        const result = await worker.recognize(canvas);
-        ocrText += result.data.text + "\n";
-      }
-
-      await worker.terminate();
-
-      if (ocrText.trim().length > text.trim().length) {
-        text = ocrText;
-      }
+    // 🔥 ако има нормален текст → НЕ OCR
+    if (text.trim().length > 100) {
+      return text.trim();
     }
 
-    return text.trim();
+    console.log("⚠️ Falling back to OCR...");
+
+    // =====================
+    // OCR FIXED
+    // =====================
+    const worker = await Tesseract.createWorker();
+
+    // ✅ САМО BULGARIAN
+    await worker.loadLanguage("bul");
+    await worker.initialize("bul");
+
+    let ocrText = "";
+
+    for (let i = 1; i <= pdf.numPages; i++) {
+      const page = await pdf.getPage(i);
+      const viewport = page.getViewport({ scale: 2 });
+
+      const canvas = document.createElement("canvas");
+      const ctx = canvas.getContext("2d");
+
+      canvas.width = viewport.width;
+      canvas.height = viewport.height;
+
+      // ✅ IMAGE PREPROCESSING
+      ctx.filter = "grayscale(100%) contrast(200%)";
+
+      await page.render({ canvasContext: ctx, viewport }).promise;
+
+      const result = await worker.recognize(canvas);
+      ocrText += (result?.data?.text || "") + "\n";
+    }
+
+    await worker.terminate();
+
+    // ✅ garbage check
+    if (isGarbage(ocrText)) {
+      throw new Error("OCR резултатът е нечетим");
+    }
+
+    return ocrText.trim();
   }
 
   // =====================
@@ -108,14 +107,11 @@
   }
 
   // =====================
-  // MAIN ANALYZE
+  // MAIN
   // =====================
   async function runNewAnalyze(e) {
 
-    if (isRunning) {
-      console.log("⏳ Already running...");
-      return;
-    }
+    if (isRunning) return;
 
     isRunning = true;
     btn.disabled = true;
@@ -148,8 +144,9 @@
         return;
       }
 
-      if (!text) {
-        show("❌ Няма текст.");
+      // ✅ FINAL VALIDATION
+      if (!text || text.length < 50 || isGarbage(text)) {
+        show("❌ Текстът е нечетим или лошо разпознат.");
         return;
       }
 
@@ -164,13 +161,9 @@
     }
   }
 
-  // ✅ САМО ТОВА (без hacks)
   btn.onclick = runNewAnalyze;
 
   show("✅ Готово. Качи файл и натисни „Анализирай“.");
 
 })();
 </script>
-
-</body>
-</html>
