@@ -169,23 +169,34 @@
 
       show("🧠 AI анализ...");
 
-      const response = await fetch("https://YOUR_PROJECT.supabase.co/functions/v1/analyze", {
-        method: "POST",
-        headers: {
-          "Content-Type": "application/json",
-        },
-        body: JSON.stringify({
-          text: text
-        })
-      });
+const response = await fetch("https://YOUR_PROJECT.supabase.co/functions/v1/analyze", {
+  method: "POST",
+  headers: {
+    "Content-Type": "application/json",
+  },
+  body: JSON.stringify({
+    text: text
+  })
+});
 
-      const data = await response.json();
+// ✅ PUT IT HERE (RIGHT AFTER FETCH)
+console.log("STATUS:", response.status);
 
-      if (!response.ok) {
-        throw new Error(data.error || "AI грешка");
-      }
+let data;
 
-      show(data.result);
+try {
+  data = await response.json();
+} catch (e) {
+  const textResponse = await response.text();
+  console.error("RAW RESPONSE:", textResponse);
+  throw new Error("Backend returned invalid JSON");
+}
+
+if (!response.ok) {
+  throw new Error(data?.error || "AI грешка");
+}
+
+show(data.result);
 
     } catch (err) {
       console.error(err);
