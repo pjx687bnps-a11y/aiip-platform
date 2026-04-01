@@ -11,21 +11,35 @@ export default async function handler(req, res) {
       });
     }
 
-    // 🔥 STEP 1: EXTRACTION (структуриране)
-const extractionPrompt = `
-Ти си система за извличане на юридически данни.
+    // ✅ LIMIT (много важно)
+    const MAX_CHARS = 12000;
+    const safeText =
+      text.length > MAX_CHARS
+        ? text.slice(0, MAX_CHARS) + "\n\n[TRUNCATED]"
+        : text;
 
-Извлечи МАКСИМАЛНО точно:
+    // ✅ TIMEOUT FETCH
+    async function fetchWithTimeout(url, options, timeout = 60000) {
+      const controller = new AbortController();
+      const id = setTimeout(() => controller.abort(), timeout);
 
+      try {
+        return await fetch(url, {
+          ...options,
+          signal: controller.signal
+        });
+      } finally {
+        clearTimeout(id);
+      }
+    }
+
+    // 🔥 STEP 1: EXTRACTION
+    const extractionPrompt = `
 Върни САМО JSON:
 
 {
   "persons": [
-    {
-      "name": "",
-      "egn": "",
-      "role": ""
-    }
+    { "name": "", "egn": "", "role": "" }
   ],
   "institutions": [],
   "case_numbers": [],
@@ -35,27 +49,29 @@ const extractionPrompt = `
 }
 
 ПРАВИЛА:
+- не измисляй
 - ако няма ЕГН → ""
-- ако има ЕГН → извлечи точно
-- разпознай роли: прокурор, жалбоподател, обвиняем
-- не измисляй данни
 - извличай само от текста
 
 Текст:
-${text}
+${safeText}
 `;
-    const extractionRes = await fetch("https://api.openai.com/v1/chat/completions", {
-      method: "POST",
-      headers: {
-        "Authorization": `Bearer ${process.env.OPENAI_API_KEY}`,
-        "Content-Type": "application/json"
-      },
-      body: JSON.stringify({
-        model: "gpt-4.1",
-        temperature: 0.1,
-        messages: [{ role: "user", content: extractionPrompt }]
-      })
-    });
+
+    const extractionRes = await fetchWithTimeout(
+      "https://api.openai.com/v1/chat/completions",
+      {
+        method: "POST",
+        headers: {
+          Authorization: `Bearer ${process.env.OPENAI_API_KEY}`,
+          "Content-Type": "application/json"
+        },
+        body: JSON.stringify({
+          model: "gpt-4.1",
+          temperature: 0.1,
+          messages: [{ role: "user", content: extractionPrompt }]
+        })
+      }
+    );
 
     const extractionData = await extractionRes.json();
 
@@ -65,130 +81,71 @@ ${text}
       });
     }
 
-    let extracted;
+    // ✅ SAFE JSON PARSE
+    function safeJSONParse(str) {
+      try {
+        const match = str.match(/\{[\s\S]*\}/);
+        if (!match) throw new Error("No JSON found");
+        return JSON.parse(match[0]);
+      } catch (e) {
+        return {
+          error: "JSON parse failed",
+          raw: str
+        };
+      }
+    }
 
-try {
-  const raw = extractionData.choices[0].message.content;
+    const rawExtraction =
+      extractionData?.choices?.[0]?.message?.content || "";
 
-  // 🧠 чистим markdown ако има
-  const cleaned = raw
-  .replace(/```json|```/g, "")
-  .replace(/\n/g, " ")
-  .trim();
+    const extracted = safeJSONParse(rawExtraction);
 
-  extracted = JSON.parse(cleaned);
-
-} catch (err) {
-  extracted = {
-    error: "Extraction failed",
-    raw: extractionData.choices[0].message.content
-  };
-}
-    // 🔥 STEP 2: ADVANCED LEGAL ANALYSIS
+    // 🔥 STEP 2: ANALYSIS (по-ефективен)
     const analysisPrompt = `
-Ти си елитен адвокат по наказателно право, работещ по сложни дела срещу прокуратурата и с опит по ЕСПЧ.
-
-Работиш на ниво:
-- съдия
-- адвокат
-- правен експерт
-
-────────────────────────
-
 ИЗХОДНИ ДАННИ:
 ${JSON.stringify(extracted, null, 2)}
 
-ОРИГИНАЛЕН ТЕКСТ:
-${text}
-
-────────────────────────
+ОРИГИНАЛЕН ТЕКСТ (съкратен):
+${safeText.slice(0, 4000)}
 
 НАПРАВИ ДЪЛБОК АНАЛИЗ:
 
-I. ФАКТИЧЕСКА РЕКОНСТРУКЦИЯ
-- реални факти
-- липсващи факти
-- процесуален контекст
-
-II. ПРАВНА КВАЛИФИКАЦИЯ
-- приложими текстове от НК
-- приложими текстове от НПК
-- потенциални правни грешки
-
-III. АНАЛИЗ НА ПРОКУРОРСКИЯ АКТ
-- формален vs реален анализ
-- нарушение на чл. 213, 243 НПК
-- липса на мотивировка
-
-IV. ДОКАЗАТЕЛСТВЕН АНАЛИЗ
-- липсващи доказателства
-- какво е трябвало да се събере
-- неправилен стандарт (данни vs доказателства)
-
-V. ЛОГИЧЕСКИ ГРЕШКИ
-- противоречия
-- необосновани изводи
-
-VI. ЕВРОПЕЙСКО ПРАВО
-- чл. 6 ЕКПЧ
-- чл. 13 ЕКПЧ
-- стандарти за ефективно разследване
-- потенциално нарушение
-
-VII. СЪДЕБНА ПРАКТИКА (АНАЛОГИЯ)
-- опиши релевантна практика (логически, не измисляй конкретни номера ако не си сигурен)
-- сравни ситуацията
-
-VIII. ЗАКОНОСЪОБРАЗНОСТ
-- оценка (1–10)
-- детайлна аргументация
-
-IX. ВЕРОЯТНОСТ ЗА УСПЕХ
-- %
-- правна логика
-
-X. ПРОЦЕСУАЛНА СТРАТЕГИЯ
-- как да се атакува отказът
-- конкретни действия
-- доказателства
-
-XI. ПРОФЕСИОНАЛНА ЖАЛБА
-- адвокатски стил
-- правни аргументи
-- структурирано
-- без шаблонен текст
-
-────────────────────────
-
-ПРАВИЛА:
-- не бъди повърхностен
-- не пиши кратко
-- мисли критично
-- анализирай като съд
-
+1. ФАКТИ
+2. ПРАВНИ ПРОБЛЕМИ
+3. НАРУШЕНИЯ
+4. ДОКАЗАТЕЛСТВА
+5. ЛОГИКА
+6. ЕСПЧ
+7. ЗАКОНОСЪОБРАЗНОСТ (1-10)
+8. ШАНС ЗА УСПЕХ (%)
+9. СТРАТЕГИЯ
+10. ЖАЛБА
 `;
 
-    const analysisRes = await fetch("https://api.openai.com/v1/chat/completions", {
-      method: "POST",
-      headers: {
-        "Authorization": `Bearer ${process.env.OPENAI_API_KEY}`,
-        "Content-Type": "application/json"
-      },
-      body: JSON.stringify({
-        model: "gpt-4.1",
-        temperature: 0.2,
-        messages: [
-          {
-            role: "system",
-            content: "Ти си топ ниво адвокат и правен анализатор."
-          },
-          {
-            role: "user",
-            content: analysisPrompt
-          }
-        ]
-      })
-    });
+    const analysisRes = await fetchWithTimeout(
+      "https://api.openai.com/v1/chat/completions",
+      {
+        method: "POST",
+        headers: {
+          Authorization: `Bearer ${process.env.OPENAI_API_KEY}`,
+          "Content-Type": "application/json"
+        },
+        body: JSON.stringify({
+          model: "gpt-4.1",
+          temperature: 0.2,
+          messages: [
+            {
+              role: "system",
+              content: "Ти си елитен адвокат."
+            },
+            {
+              role: "user",
+              content: analysisPrompt
+            }
+          ]
+        })
+      }
+    );
 
     const analysisData = await analysisRes.json();
 
@@ -198,8 +155,18 @@ XI. ПРОФЕСИОНАЛНА ЖАЛБА
       });
     }
 
+    // ✅ SAFE RESPONSE
+    const result =
+      analysisData?.choices?.[0]?.message?.content ||
+      "❌ Няма отговор от AI";
+
+    // ✅ DEBUG LOGS (махни в production)
+    console.log("TEXT LENGTH:", text.length);
+    console.log("EXTRACTED:", extracted);
+
     return res.status(200).json({
-      result: analysisData.choices[0].message.content
+      extracted,
+      result
     });
 
   } catch (err) {
