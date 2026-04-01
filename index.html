@@ -18,14 +18,19 @@
     output.value = msg;
   }
 
-  // ✅ DETECT GARBAGE
+  // ✅ ПО-ДОБЪР GARBAGE DETECTOR
   function isGarbage(text) {
     if (!text) return true;
 
-    const badChars = text.match(/[A-Z]{3,}/g) || [];
-    const ratio = badChars.length / text.length;
+    const cyrillic = (text.match(/[А-Яа-я]/g) || []).length;
+    const latin = (text.match(/[A-Za-z]/g) || []).length;
 
-    return ratio > 0.05;
+    if (latin > cyrillic) return true;
+
+    const caps = (text.match(/[A-Z]{3,}/g) || []).length;
+    if (caps > 20) return true;
+
+    return false;
   }
 
   // =====================
@@ -43,19 +48,14 @@
       text += content.items.map(i => i.str || "").join(" ") + "\n";
     }
 
-    // 🔥 ако има нормален текст → НЕ OCR
     if (text.trim().length > 100) {
       return text.trim();
     }
 
-    console.log("⚠️ Falling back to OCR...");
+    console.log("⚠️ OCR fallback...");
 
-    // =====================
-    // OCR FIXED
-    // =====================
     const worker = await Tesseract.createWorker();
 
-    // ✅ САМО BULGARIAN
     await worker.loadLanguage("bul");
     await worker.initialize("bul");
 
@@ -71,7 +71,6 @@
       canvas.width = viewport.width;
       canvas.height = viewport.height;
 
-      // ✅ IMAGE PREPROCESSING
       ctx.filter = "grayscale(100%) contrast(200%)";
 
       await page.render({ canvasContext: ctx, viewport }).promise;
@@ -82,7 +81,8 @@
 
     await worker.terminate();
 
-    // ✅ garbage check
+    console.log("OCR OUTPUT:", ocrText.slice(0, 300));
+
     if (isGarbage(ocrText)) {
       throw new Error("OCR резултатът е нечетим");
     }
@@ -150,7 +150,32 @@
         return;
       }
 
-      show(text);
+      // =====================
+      // 🔥 CALL API (НОВО)
+      // =====================
+      show("🧠 Анализиране...");
+
+      const res = await fetch("/api/analyze", {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json"
+        },
+        body: JSON.stringify({ text })
+      });
+
+      const data = await res.json();
+
+      if (!res.ok) {
+        throw new Error(data.error || "API error");
+      }
+
+      // ✅ ПОКАЗВАШ И ANALYSIS + EXTRACTED
+      show(
+        "=== АНАЛИЗ ===\n\n" +
+        data.result +
+        "\n\n=== ИЗВЛЕЧЕНИ ДАННИ ===\n\n" +
+        JSON.stringify(data.extracted, null, 2)
+      );
 
     } catch (err) {
       console.error(err);
