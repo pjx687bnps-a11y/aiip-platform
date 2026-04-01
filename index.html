@@ -1,120 +1,44 @@
+<!DOCTYPE html>
+<html lang="bg">
+<head>
+  <meta charset="UTF-8">
+  <title>AIIP Legal Assistant</title>
+</head>
+<body>
+
+<h2>AIIP Legal Assistant</h2>
+
+<input type="file" id="file" />
+<br><br>
+
+<button id="analyzeBtn">Анализирай</button>
+
+<br><br>
+
+<textarea id="output" style="width:100%; height:300px;"></textarea>
+
+<!-- 🔥 БИБЛИОТЕКИ (ЗАДЪЛЖИТЕЛНО ПРЕДИ SCRIPT) -->
+<script src="https://cdnjs.cloudflare.com/ajax/libs/pdf.js/3.11.174/pdf.min.js"></script>
+<script src="https://unpkg.com/tesseract.js@5/dist/tesseract.min.js"></script>
+<script src="https://unpkg.com/mammoth/mammoth.browser.min.js"></script>
+
 <script>
-document.addEventListener("DOMContentLoaded", () => {
+document.addEventListener("DOMContentLoaded", function () {
 
   const output = document.getElementById("output");
   const btn = document.getElementById("analyzeBtn");
   const fileInput = document.getElementById("file");
 
-  // ❗ НЕ СПИРАМЕ SCRIPT-А
-  if (!output || !btn || !fileInput) {
-    console.error("❌ Липсват DOM елементи", {
-      output,
-      btn,
-      fileInput
-    });
+  function show(msg) {
+    output.value = msg;
   }
 
-  let isRunning = false;
-
-  const show = (msg) => {
-    if (output) output.value = msg || "";
-  };
-
-  const isGarbage = (text) => {
-    if (!text) return true;
-
-    const cyr = (text.match(/[А-Яа-я]/g) || []).length;
-    const lat = (text.match(/[A-Za-z]/g) || []).length;
-
-    if (lat > cyr) return true;
-
-    const caps = (text.match(/[A-Z]{3,}/g) || []).length;
-    if (caps > 20) return true;
-
-    return false;
-  };
-
-  const extractTextFromPDF = async (file) => {
-
-    if (typeof pdfjsLib === "undefined") {
-      throw new Error("pdf.js не е зареден");
-    }
-
-    pdfjsLib.GlobalWorkerOptions.workerSrc =
-      "https://cdnjs.cloudflare.com/ajax/libs/pdf.js/3.11.174/pdf.worker.min.js";
-
-    const buffer = await file.arrayBuffer();
-    const pdf = await pdfjsLib.getDocument({ data: buffer }).promise;
-
-    let text = "";
-
-    for (let i = 1; i <= pdf.numPages; i++) {
-      const page = await pdf.getPage(i);
-      const content = await page.getTextContent();
-      text += content.items.map(x => x.str || "").join(" ") + "\n";
-    }
-
-    if (text.trim().length > 100) return text.trim();
-
-    const worker = await Tesseract.createWorker();
-    await worker.loadLanguage("bul");
-    await worker.initialize("bul");
-
-    let ocrText = "";
-
-    for (let i = 1; i <= pdf.numPages; i++) {
-      const page = await pdf.getPage(i);
-      const viewport = page.getViewport({ scale: 2 });
-
-      const canvas = document.createElement("canvas");
-      const ctx = canvas.getContext("2d");
-
-      canvas.width = viewport.width;
-      canvas.height = viewport.height;
-
-      ctx.filter = "grayscale(100%) contrast(200%)";
-
-      await page.render({ canvasContext: ctx, viewport }).promise;
-
-      const result = await worker.recognize(canvas);
-      ocrText += (result?.data?.text || "") + "\n";
-    }
-
-    await worker.terminate();
-
-    if (isGarbage(ocrText)) {
-      throw new Error("OCR резултатът е нечетим");
-    }
-
-    return ocrText.trim();
-  };
-
-  const extractTextFromWord = async (file) => {
-    const buffer = await file.arrayBuffer();
-    const result = await mammoth.extractRawText({ arrayBuffer: buffer });
-    return (result.value || "").trim();
-  };
-
-  const extractTextFromTxt = async (file) => {
-    return (await file.text()).trim();
-  };
-
-  const run = async (e) => {
-
-    if (!btn || !fileInput) return;
-
-    if (isRunning) return;
-
-    isRunning = true;
-    btn.disabled = true;
-
-    if (e) e.preventDefault();
-
-    show("🟢 Обработка...");
+  btn.addEventListener("click", async function () {
 
     try {
       if (!fileInput.files.length) {
-        throw new Error("Моля качете файл");
+        show("❌ Моля качете файл");
+        return;
       }
 
       const file = fileInput.files[0];
@@ -122,18 +46,46 @@ document.addEventListener("DOMContentLoaded", () => {
 
       let text = "";
 
-      if (name.endsWith(".pdf")) {
-        text = await extractTextFromPDF(file);
-      } else if (name.endsWith(".docx")) {
-        text = await extractTextFromWord(file);
-      } else if (name.endsWith(".txt")) {
-        text = await extractTextFromTxt(file);
-      } else {
-        throw new Error("Поддържат се само PDF, DOCX и TXT");
+      // ✅ TXT
+      if (name.endsWith(".txt")) {
+        text = await file.text();
       }
 
-      if (!text || text.length < 50 || isGarbage(text)) {
-        throw new Error("Текстът е нечетим или лошо разпознат");
+      // ✅ DOCX
+      else if (name.endsWith(".docx")) {
+        const buffer = await file.arrayBuffer();
+        const result = await mammoth.extractRawText({ arrayBuffer: buffer });
+        text = result.value;
+      }
+
+      // ✅ PDF (без OCR за стабилност)
+      else if (name.endsWith(".pdf")) {
+
+        if (typeof pdfjsLib === "undefined") {
+          throw new Error("pdf.js не е зареден");
+        }
+
+        pdfjsLib.GlobalWorkerOptions.workerSrc =
+          "https://cdnjs.cloudflare.com/ajax/libs/pdf.js/3.11.174/pdf.worker.min.js";
+
+        const buffer = await file.arrayBuffer();
+        const pdf = await pdfjsLib.getDocument({ data: buffer }).promise;
+
+        for (let i = 1; i <= pdf.numPages; i++) {
+          const page = await pdf.getPage(i);
+          const content = await page.getTextContent();
+          text += content.items.map(i => i.str).join(" ") + "\n";
+        }
+      }
+
+      else {
+        show("❌ Неподдържан файл");
+        return;
+      }
+
+      if (!text || text.length < 10) {
+        show("❌ Няма текст");
+        return;
       }
 
       show("🧠 Анализиране...");
@@ -146,35 +98,21 @@ document.addEventListener("DOMContentLoaded", () => {
         body: JSON.stringify({ text })
       });
 
-      const data = await res.json().catch(() => {
-        throw new Error("API не върна JSON");
-      });
+      const data = await res.json();
 
-      if (!res.ok) {
-        throw new Error(data.error || "API грешка");
-      }
-
-      show(
-        "=== АНАЛИЗ ===\n\n" +
-        (data.result || "") +
-        "\n\n=== ИЗВЛЕЧЕНИ ДАННИ ===\n\n" +
-        JSON.stringify(data.extracted || {}, null, 2)
-      );
+      show(data.result || JSON.stringify(data, null, 2));
 
     } catch (err) {
       console.error(err);
       show("❌ " + err.message);
-    } finally {
-      isRunning = false;
-      if (btn) btn.disabled = false;
     }
-  };
 
-  if (btn) {
-    btn.addEventListener("click", run);
-  }
+  });
 
-  show("✅ Готово. Качи файл и натисни „Анализирай“.");
+  show("✅ Готово");
 
 });
 </script>
+
+</body>
+</html>
