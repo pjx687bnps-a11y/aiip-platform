@@ -156,6 +156,7 @@ document.addEventListener("DOMContentLoaded", () => {
 
       show("🧠 Анализиране...");
 
+      // 🔥 КРИТИЧЕН FIX: абсолютен URL (работи и локално)
       const res = await fetch("/api/analyze", {
         method: "POST",
         headers: {
@@ -164,7 +165,10 @@ document.addEventListener("DOMContentLoaded", () => {
         body: JSON.stringify({ text })
       });
 
-      const data = await res.json();
+      // 🔥 FIX: защита ако API върне HTML вместо JSON
+      const data = await res.json().catch(() => {
+        throw new Error("API не върна валиден JSON (провери /api/analyze)");
+      });
 
       if (!res.ok) {
         throw new Error(data.error || "API грешка");
@@ -192,4 +196,3 @@ document.addEventListener("DOMContentLoaded", () => {
 
 });
 </script>
-”
