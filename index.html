@@ -16,118 +16,125 @@
 <h3>📊 Резултат:</h3>
 <textarea id="output" style="width:100%; height:400px;"></textarea>
 
-<script src="https://cdnjs.cloudflare.com/ajax/libs/pdf.js/3.11.174/pdf.min.js"></script>
+<!-- По-стабилни CDN -->
+<script src="https://cdn.jsdelivr.net/npm/pdfjs-dist@3.11.174/build/pdf.min.js"></script>
 <script src="https://unpkg.com/tesseract.js@5/dist/tesseract.min.js"></script>
 <script src="https://unpkg.com/mammoth/mammoth.browser.min.js"></script>
 
 <script>
 (function () {
-  if (window.pdfjsLib) {
-    pdfjsLib.GlobalWorkerOptions.workerSrc =
-      "https://cdnjs.cloudflare.com/ajax/libs/pdf.js/3.11.174/pdf.worker.min.js";
+
+  // ✅ INIT
+  if (!window.pdfjsLib) {
+    alert("❌ pdf.js не е зареден");
+    return;
   }
 
+  pdfjsLib.GlobalWorkerOptions.workerSrc =
+    "https://cdn.jsdelivr.net/npm/pdfjs-dist@3.11.174/build/pdf.worker.min.js";
+
   const output = document.getElementById("output");
+  const btn = document.getElementById("analyzeBtn");
+
+  let isRunning = false;
 
   function show(msg) {
     output.value = msg;
   }
 
-  // блокира стария /api/analyze ако някъде още се вика
-  const originalFetch = window.fetch ? window.fetch.bind(window) : null;
-  window.fetch = async function (url, options) {
-    try {
-      if (typeof url === "string" && url.includes("/api/analyze")) {
-        return new Response(
-          JSON.stringify({ result: "⚠️ Старият /api/analyze беше блокиран от новия код." }),
-          {
-            status: 200,
-            headers: { "Content-Type": "application/json" }
-          }
-        );
-      }
-    } catch (e) {}
-    if (originalFetch) return originalFetch(url, options);
-    throw new Error("fetch is not available");
-  };
-
+  // =====================
+  // PDF
+  // =====================
   async function extractTextFromPDF(file) {
     const buffer = await file.arrayBuffer();
     const pdf = await pdfjsLib.getDocument({ data: buffer }).promise;
+
     let text = "";
 
     for (let i = 1; i <= pdf.numPages; i++) {
       const page = await pdf.getPage(i);
       const content = await page.getTextContent();
-      const pageText = content.items.map(item => item.str || "").join(" ").trim();
-      text += pageText + "\n";
+      text += content.items.map(i => i.str || "").join(" ") + "\n";
     }
 
+    // OCR fallback
     if (text.trim().length < 20) {
-      try {
-        const worker = await Tesseract.createWorker("bul+eng");
-        let ocrText = "";
+      const worker = await Tesseract.createWorker();
+      await worker.loadLanguage("bul+eng");
+      await worker.initialize("bul+eng");
 
-        for (let i = 1; i <= pdf.numPages; i++) {
-          const page = await pdf.getPage(i);
-          const viewport = page.getViewport({ scale: 2 });
+      let ocrText = "";
 
-          const canvas = document.createElement("canvas");
-          const ctx = canvas.getContext("2d");
+      for (let i = 1; i <= pdf.numPages; i++) {
+        const page = await pdf.getPage(i);
+        const viewport = page.getViewport({ scale: 2 });
 
-          canvas.width = Math.ceil(viewport.width);
-          canvas.height = Math.ceil(viewport.height);
+        const canvas = document.createElement("canvas");
+        const ctx = canvas.getContext("2d");
 
-          await page.render({
-            canvasContext: ctx,
-            viewport: viewport
-          }).promise;
+        canvas.width = viewport.width;
+        canvas.height = viewport.height;
 
-          const result = await worker.recognize(canvas);
-          ocrText += ((result && result.data && result.data.text) ? result.data.text : "") + "\n";
-        }
+        await page.render({ canvasContext: ctx, viewport }).promise;
 
-        await worker.terminate();
+        const result = await worker.recognize(canvas);
+        ocrText += result.data.text + "\n";
+      }
 
-        if (ocrText.trim().length > text.trim().length) {
-          text = ocrText;
-        }
-      } catch (e) {
-        console.error("OCR error:", e);
+      await worker.terminate();
+
+      if (ocrText.trim().length > text.trim().length) {
+        text = ocrText;
       }
     }
 
     return text.trim();
   }
 
+  // =====================
+  // WORD
+  // =====================
   async function extractTextFromWord(file) {
-    const arrayBuffer = await file.arrayBuffer();
-    const result = await mammoth.extractRawText({ arrayBuffer: arrayBuffer });
-    return (result.value || "").trim();
+    const buffer = await file.arrayBuffer();
+    const result = await mammoth.extractRawText({ arrayBuffer: buffer });
+    return result.value.trim();
   }
 
+  // =====================
+  // TXT
+  // =====================
   async function extractTextFromTxt(file) {
     return (await file.text()).trim();
   }
 
+  // =====================
+  // MAIN ANALYZE
+  // =====================
   async function runNewAnalyze(e) {
-    if (e) {
-      e.preventDefault();
-      e.stopPropagation();
-      if (e.stopImmediatePropagation) e.stopImmediatePropagation();
+
+    if (isRunning) {
+      console.log("⏳ Already running...");
+      return;
     }
 
-    const fileInput = document.getElementById("file");
-    show("🟢 НОВИЯТ КОД СЕ ИЗПЪЛНЯВА...");
+    isRunning = true;
+    btn.disabled = true;
+
+    if (e) e.preventDefault();
+
+    show("🟢 Обработка...");
 
     try {
-      if (!fileInput || !fileInput.files || fileInput.files.length === 0) {
+      const fileInput = document.getElementById("file");
+
+      if (!fileInput.files.length) {
         show("❌ Моля качете файл.");
-        return false;
+        return;
       }
 
       const file = fileInput.files[0];
-      const name = (file.name || "").toLowerCase();
+      const name = file.name.toLowerCase();
+
       let text = "";
 
       if (name.endsWith(".pdf")) {
@@ -138,59 +145,30 @@
         text = await extractTextFromTxt(file);
       } else {
         show("❌ Поддържат се само PDF, DOCX и TXT.");
-        return false;
+        return;
       }
 
-      if (!text || !text.trim()) {
-        show("❌ Няма текст в документа.");
-        return false;
+      if (!text) {
+        show("❌ Няма текст.");
+        return;
       }
 
       show(text);
-      return false;
+
     } catch (err) {
       console.error(err);
       show("❌ Грешка: " + err.message);
-      return false;
+    } finally {
+      isRunning = false;
+      btn.disabled = false;
     }
   }
 
-  // глобално override на analyze
-  window.analyze = runNewAnalyze;
+  // ✅ САМО ТОВА (без hacks)
+  btn.onclick = runNewAnalyze;
 
-  // прехващане на click още на document ниво
-  document.addEventListener("click", function (e) {
-    const btn = e.target && e.target.closest ? e.target.closest("#analyzeBtn") : null;
-    if (!btn) return;
-    runNewAnalyze(e);
-  }, true);
+  show("✅ Готово. Качи файл и натисни „Анализирай“.");
 
-  // подменя бутона, за да махне старите listeners
-  function replaceButton() {
-    const oldBtn = document.getElementById("analyzeBtn");
-    if (!oldBtn || !oldBtn.parentNode) return;
-
-    const newBtn = oldBtn.cloneNode(true);
-    newBtn.type = "button";
-    oldBtn.parentNode.replaceChild(newBtn, oldBtn);
-
-    newBtn.onclick = runNewAnalyze;
-    newBtn.addEventListener("click", runNewAnalyze, true);
-  }
-
-  // периодично презаписва бутона, ако платформата инжектира стар код пак
-  function keepOverrideAlive() {
-    replaceButton();
-    const btn = document.getElementById("analyzeBtn");
-    if (btn) {
-      btn.onclick = runNewAnalyze;
-    }
-  }
-
-  keepOverrideAlive();
-  setInterval(keepOverrideAlive, 1000);
-
-  show("✅ Кодът е зареден. Качи файл и натисни „Анализирай“.");
 })();
 </script>
 
