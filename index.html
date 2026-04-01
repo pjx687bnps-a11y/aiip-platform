@@ -1,14 +1,6 @@
 <script>
 (function () {
 
-  if (!window.pdfjsLib) {
-    alert("❌ pdf.js не е зареден");
-    return;
-  }
-
-  pdfjsLib.GlobalWorkerOptions.workerSrc =
-    "https://cdn.jsdelivr.net/npm/pdfjs-dist@3.11.174/build/pdf.worker.min.js";
-
   const output = document.getElementById("output");
   const btn = document.getElementById("analyzeBtn");
 
@@ -18,7 +10,9 @@
     output.value = msg;
   }
 
-  // ✅ ПО-ДОБЪР GARBAGE DETECTOR
+  // =====================
+  // ✅ GARBAGE DETECTOR
+  // =====================
   function isGarbage(text) {
     if (!text) return true;
 
@@ -37,6 +31,14 @@
   // PDF
   // =====================
   async function extractTextFromPDF(file) {
+
+    if (typeof pdfjsLib === "undefined") {
+      throw new Error("pdf.js не е зареден (провери CDN)");
+    }
+
+    pdfjsLib.GlobalWorkerOptions.workerSrc =
+      "https://cdnjs.cloudflare.com/ajax/libs/pdf.js/3.11.174/pdf.worker.min.js";
+
     const buffer = await file.arrayBuffer();
     const pdf = await pdfjsLib.getDocument({ data: buffer }).promise;
 
@@ -48,6 +50,7 @@
       text += content.items.map(i => i.str || "").join(" ") + "\n";
     }
 
+    // ако има текст → не OCR
     if (text.trim().length > 100) {
       return text.trim();
     }
@@ -96,7 +99,7 @@
   async function extractTextFromWord(file) {
     const buffer = await file.arrayBuffer();
     const result = await mammoth.extractRawText({ arrayBuffer: buffer });
-    return result.value.trim();
+    return (result.value || "").trim();
   }
 
   // =====================
@@ -123,7 +126,7 @@
     try {
       const fileInput = document.getElementById("file");
 
-      if (!fileInput.files.length) {
+      if (!fileInput || !fileInput.files.length) {
         show("❌ Моля качете файл.");
         return;
       }
@@ -144,14 +147,14 @@
         return;
       }
 
-      // ✅ FINAL VALIDATION
+      // FINAL VALIDATION
       if (!text || text.length < 50 || isGarbage(text)) {
         show("❌ Текстът е нечетим или лошо разпознат.");
         return;
       }
 
       // =====================
-      // 🔥 CALL API (НОВО)
+      // 🔥 API CALL
       // =====================
       show("🧠 Анализиране...");
 
@@ -169,7 +172,6 @@
         throw new Error(data.error || "API error");
       }
 
-      // ✅ ПОКАЗВАШ И ANALYSIS + EXTRACTED
       show(
         "=== АНАЛИЗ ===\n\n" +
         data.result +
@@ -186,6 +188,9 @@
     }
   }
 
+  // =====================
+  // INIT
+  // =====================
   btn.onclick = runNewAnalyze;
 
   show("✅ Готово. Качи файл и натисни „Анализирай“.");
