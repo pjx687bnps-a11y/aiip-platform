@@ -166,14 +166,11 @@ document.addEventListener("DOMContentLoaded", function () {
         body: JSON.stringify({ text })
       });
 
-      let data;
+const data = await response.json();
 
-      try {
-        data = await response.json();
-      } catch {
-        const raw = await response.text();
-        console.error("RAW:", raw);
-        throw new Error("Invalid JSON from backend");
+if (!response.ok) {
+  throw new Error(data?.error || "AI грешка");
+}
       }
 
       if (!response.ok) {
