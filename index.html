@@ -22,9 +22,8 @@
 <script src="https://unpkg.com/mammoth/mammoth.browser.min.js"></script>
 
 <script>
-(function () {
+document.addEventListener("DOMContentLoaded", function () {
 
-  // INIT
   if (!window.pdfjsLib) {
     alert("❌ pdf.js не е зареден");
     return;
@@ -88,14 +87,12 @@
       }
     }
 
-    // CLEANUP (safe)
-    text = text
+    return text
       .replace(/\s+/g, " ")
       .replace(/CBABT/g, "Съдът")
       .replace(/MapKa/g, "марка")
-      .replace(/3HaK/g, "знак");
-
-    return text.trim();
+      .replace(/3HaK/g, "знак")
+      .trim();
   }
 
   // =====================
@@ -115,19 +112,14 @@
   }
 
   // =====================
-  // MAIN ANALYZE
+  // MAIN
   // =====================
   async function runNewAnalyze(e) {
 
-    if (isRunning) {
-      console.log("⏳ Already running...");
-      return;
-    }
+    if (isRunning) return;
 
     isRunning = true;
     btn.disabled = true;
-
-    if (e) e.preventDefault();
 
     show("🟢 Обработка...");
 
@@ -160,44 +152,35 @@
         return;
       }
 
-      // limit
       if (text.length > 20000) {
         text = text.slice(0, 20000);
       }
 
-      console.log("TEXT LENGTH:", text.length);
+      show("🧠 AI анализ...");
 
-show("🧠 AI анализ...");
+      const response = await fetch("/api/analyze", {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+        },
+        body: JSON.stringify({ text })
+      });
 
-console.log("SENDING TEXT:", text);
+      let data;
 
-const response = await fetch("/api/analyze", {
-  method: "POST",
-  headers: {
-    "Content-Type": "application/json",
-  },
-  body: JSON.stringify({
-    text: text
-  })
-});
+      try {
+        data = await response.json();
+      } catch {
+        const raw = await response.text();
+        console.error("RAW:", raw);
+        throw new Error("Invalid JSON from backend");
+      }
 
-console.log("STATUS:", response.status);
+      if (!response.ok) {
+        throw new Error(data?.error || "AI грешка");
+      }
 
-let data;
-
-try {
-  data = await response.json();
-} catch (e) {
-  const raw = await response.text();
-  console.error("RAW RESPONSE:", raw);
-  throw new Error("Backend returned invalid JSON");
-}
-
-if (!response.ok) {
-  throw new Error(data?.error || "AI грешка");
-}
-
-show(data.result);
+      show(data.result || "Няма резултат");
 
     } catch (err) {
       console.error(err);
@@ -208,11 +191,11 @@ show(data.result);
     }
   }
 
-  btn.onclick = runNewAnalyze;
+  btn.addEventListener("click", runNewAnalyze);
 
   show("✅ Готово. Качи файл и натисни „Анализирай“.");
 
-})();
+});
 </script>
 
 </body>
