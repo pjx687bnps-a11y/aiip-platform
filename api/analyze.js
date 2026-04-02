@@ -1,8 +1,38 @@
 import { createClient } from "@supabase/supabase-js";
 
-const supabaseUrl = process.env.SUPABASE_URL;
-const supabaseKey = process.env.SUPABASE_SERVICE_ROLE_KEY;
+export default async function handler(req, res) {
+  try {
 
+    const supabaseUrl = process.env.SUPABASE_URL;
+    const supabaseKey = process.env.SUPABASE_SERVICE_ROLE_KEY;
+
+    let supabase = null;
+
+    if (supabaseUrl && supabaseKey) {
+      supabase = createClient(supabaseUrl, supabaseKey);
+    } else {
+      console.error("❌ Supabase env missing");
+    }
+if (supabase) {
+  try {
+    const resDb = await supabase
+      .from("analyses")
+      .insert([
+        {
+          text: safeText,
+          extracted: extracted,
+          result: result
+        }
+      ]);
+
+    if (resDb.error) {
+      console.error("SUPABASE ERROR:", resDb.error);
+    }
+
+  } catch (e) {
+    console.error("SUPABASE CRASH:", e);
+  }
+}
 if (!supabaseUrl || !supabaseKey) {
   throw new Error("Supabase env variables missing");
 }
