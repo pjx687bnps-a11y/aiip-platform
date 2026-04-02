@@ -1,9 +1,13 @@
 import { createClient } from "@supabase/supabase-js";
 
-const supabase = createClient(
-  process.env.SUPABASE_URL,
-  process.env.SUPABASE_SERVICE_ROLE_KEY
-);
+const supabaseUrl = process.env.SUPABASE_URL;
+const supabaseKey = process.env.SUPABASE_SERVICE_ROLE_KEY;
+
+if (!supabaseUrl || !supabaseKey) {
+  throw new Error("Supabase env variables missing");
+}
+
+const supabase = createClient(supabaseUrl, supabaseKey);
 export default async function handler(req, res) {
   try {
     const body =
@@ -161,28 +165,29 @@ ${safeText.slice(0, 4000)}
       });
     }
 
-    // ✅ SAFE RESPONSE
-    const result =
-      analysisData?.choices?.[0]?.message?.content ||
-      "❌ Няма отговор от AI";
-// 💾 SAVE TO SUPABASE
-const { error: dbError } = await supabase
-  .from("analyses")
-  .insert([
-    {
-      text: safeText,
-      extracted: extracted,
-      result: result
-    }
-  ]);
+ // 💾 SAVE TO SUPABASE (SAFE - НЕ ЧУПИ APP-а)
+let dbError = null;
 
+try {
+  const resDb = await supabase
+    .from("analyses")
+    .insert([
+      {
+        text: safeText,
+        extracted: extracted,
+        result: result
+      }
+    ]);
+
+  dbError = resDb.error;
+
+} catch (e) {
+  console.error("SUPABASE CRASH:", e);
+}
+
+// ако има грешка - само логваме, НЕ спираме приложението
 if (dbError) {
   console.error("SUPABASE ERROR:", dbError);
-
-  return res.status(500).json({
-    error: "Database insert failed",
-    details: dbError.message
-  });
 }
     // ✅ DEBUG LOGS (махни в production)
     console.log("TEXT LENGTH:", text.length);
