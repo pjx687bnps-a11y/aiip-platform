@@ -3,43 +3,9 @@ import { createClient } from "@supabase/supabase-js";
 export default async function handler(req, res) {
   try {
 
-    const supabaseUrl = process.env.SUPABASE_URL;
-    const supabaseKey = process.env.SUPABASE_SERVICE_ROLE_KEY;
-
-    let supabase = null;
-
-    if (supabaseUrl && supabaseKey) {
-      supabase = createClient(supabaseUrl, supabaseKey);
-    } else {
-      console.error("❌ Supabase env missing");
-    }
-if (supabase) {
-  try {
-    const resDb = await supabase
-      .from("analyses")
-      .insert([
-        {
-          text: safeText,
-          extracted: extracted,
-          result: result
-        }
-      ]);
-
-    if (resDb.error) {
-      console.error("SUPABASE ERROR:", resDb.error);
-    }
-
-  } catch (e) {
-    console.error("SUPABASE CRASH:", e);
-  }
-}
-if (!supabaseUrl || !supabaseKey) {
-  throw new Error("Supabase env variables missing");
-}
-
-const supabase = createClient(supabaseUrl, supabaseKey);
-export default async function handler(req, res) {
-  try {
+    // =====================
+    // SAFE BODY PARSE
+    // =====================
     const body =
       typeof req.body === "string" ? JSON.parse(req.body) : req.body;
 
@@ -51,14 +17,18 @@ export default async function handler(req, res) {
       });
     }
 
-    // ✅ LIMIT (много важно)
+    // =====================
+    // LIMIT
+    // =====================
     const MAX_CHARS = 12000;
     const safeText =
       text.length > MAX_CHARS
         ? text.slice(0, MAX_CHARS) + "\n\n[TRUNCATED]"
         : text;
 
-    // ✅ TIMEOUT FETCH
+    // =====================
+    // TIMEOUT FETCH
+    // =====================
     async function fetchWithTimeout(url, options, timeout = 60000) {
       const controller = new AbortController();
       const id = setTimeout(() => controller.abort(), timeout);
@@ -73,7 +43,9 @@ export default async function handler(req, res) {
       }
     }
 
-    // 🔥 STEP 1: EXTRACTION
+    // =====================
+    // STEP 1: EXTRACTION
+    // =====================
     const extractionPrompt = `
 Върни САМО JSON:
 
@@ -121,7 +93,9 @@ ${safeText}
       });
     }
 
-    // ✅ SAFE JSON PARSE
+    // =====================
+    // SAFE JSON PARSE
+    // =====================
     function safeJSONParse(str) {
       try {
         const match = str.match(/\{[\s\S]*\}/);
@@ -140,7 +114,9 @@ ${safeText}
 
     const extracted = safeJSONParse(rawExtraction);
 
-    // 🔥 STEP 2: ANALYSIS (по-ефективен)
+    // =====================
+    // STEP 2: ANALYSIS
+    // =====================
     const analysisPrompt = `
 ИЗХОДНИ ДАННИ:
 ${JSON.stringify(extracted, null, 2)}
@@ -195,42 +171,65 @@ ${safeText.slice(0, 4000)}
       });
     }
 
- // 💾 SAVE TO SUPABASE (SAFE - НЕ ЧУПИ APP-а)
-let dbError = null;
+    const result =
+      analysisData?.choices?.[0]?.message?.content ||
+      "❌ Няма отговор от AI";
 
-try {
-  const resDb = await supabase
-    .from("analyses")
-    .insert([
-      {
-        text: safeText,
-        extracted: extracted,
-        result: result
+    // =====================
+    // SUPABASE (SAFE INIT)
+    // =====================
+    let supabase = null;
+
+    try {
+      const url = process.env.SUPABASE_URL;
+      const key = process.env.SUPABASE_SERVICE_ROLE_KEY;
+
+      if (url && key) {
+        supabase = createClient(url, key);
+      } else {
+        console.error("❌ Supabase ENV missing");
       }
-    ]);
+    } catch (e) {
+      console.error("❌ Supabase init crash:", e);
+    }
 
-  dbError = resDb.error;
+    // =====================
+    // SUPABASE INSERT (SAFE)
+    // =====================
+    if (supabase) {
+      try {
+        const { error } = await supabase
+          .from("analyses")
+          .insert([
+            {
+              text: safeText,
+              extracted: extracted,
+              result: result
+            }
+          ]);
 
-} catch (e) {
-  console.error("SUPABASE CRASH:", e);
-}
+        if (error) {
+          console.error("SUPABASE ERROR:", error);
+        }
 
-// ако има грешка - само логваме, НЕ спираме приложението
-if (dbError) {
-  console.error("SUPABASE ERROR:", dbError);
-}
-    // ✅ DEBUG LOGS (махни в production)
-    console.log("TEXT LENGTH:", text.length);
-    console.log("EXTRACTED:", extracted);
+      } catch (e) {
+        console.error("SUPABASE CRASH:", e);
+      }
+    }
 
+    // =====================
+    // FINAL RESPONSE (ALWAYS JSON)
+    // =====================
     return res.status(200).json({
       extracted,
       result
     });
 
   } catch (err) {
+    console.error("🔥 FINAL ERROR:", err);
+
     return res.status(500).json({
-      error: err.message
+      error: err.message || "Unknown server error"
     });
   }
 }
