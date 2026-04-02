@@ -1,3 +1,9 @@
+import { createClient } from "@supabase/supabase-js";
+
+const supabase = createClient(
+  process.env.SUPABASE_URL,
+  process.env.SUPABASE_SERVICE_ROLE_KEY
+);
 export default async function handler(req, res) {
   try {
     const body =
@@ -159,7 +165,25 @@ ${safeText.slice(0, 4000)}
     const result =
       analysisData?.choices?.[0]?.message?.content ||
       "❌ Няма отговор от AI";
+// 💾 SAVE TO SUPABASE
+const { error: dbError } = await supabase
+  .from("analyses")
+  .insert([
+    {
+      text: safeText,
+      extracted: extracted,
+      result: result
+    }
+  ]);
 
+if (dbError) {
+  console.error("SUPABASE ERROR:", dbError);
+
+  return res.status(500).json({
+    error: "Database insert failed",
+    details: dbError.message
+  });
+}
     // ✅ DEBUG LOGS (махни в production)
     console.log("TEXT LENGTH:", text.length);
     console.log("EXTRACTED:", extracted);
