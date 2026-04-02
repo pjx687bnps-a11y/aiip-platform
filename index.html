@@ -185,32 +185,11 @@ console.log("STATUS:", response.status);
 
 let data;
 
-  method: "POST",
-  headers: {
-    "Content-Type": "application/json",
-  },
-  body: JSON.stringify({
-    text: text
-  })
-});
-
-const data = await response.json();
-
-if (!response.ok) {
-  throw new Error(data.error || "AI грешка");
-}
-
-show(data.result);
-// ✅ PUT IT HERE (RIGHT AFTER FETCH)
-console.log("STATUS:", response.status);
-
-let data;
-
 try {
   data = await response.json();
 } catch (e) {
-  const textResponse = await response.text();
-  console.error("RAW RESPONSE:", textResponse);
+  const raw = await response.text();
+  console.error("RAW RESPONSE:", raw);
   throw new Error("Backend returned invalid JSON");
 }
 
