@@ -208,9 +208,12 @@ ${safeText.slice(0, 4000)}
             }
           ]);
 
-        if (error) {
-          console.error("SUPABASE ERROR:", error);
-        }
+       if (error) {
+  return res.status(500).json({
+    error: "Supabase insert failed",
+    details: error.message
+  });
+}
 
       } catch (e) {
         console.error("SUPABASE CRASH:", e);
